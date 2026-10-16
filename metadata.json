@@ -1,0 +1,6 @@
+{
+  "name": "TruthCart AI - Grounded Conversational Shopping Assistant",
+  "description": "Production-grade conversational shopping assistant with hybrid retrieval, claim-level evidence attribution, constraint validation, policy verification, and live adversarial evaluation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

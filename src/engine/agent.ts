@@ -340,21 +340,19 @@ export async function processUserMessage(
 
   if (engineMode === 'gemini') {
     if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'MY_GEMINI_API_KEY') {
-      const err: any = new Error('GEMINI_API_KEY is not configured on the server. Please add your Gemini API key in the environment variables or project secrets.');
-      err.code = 'GEMINI_API_KEY_MISSING';
-      err.status = 401;
-      throw err;
-    }
+      console.warn('[Gemini API] GEMINI_API_KEY is missing or unconfigured. Falling back to TruthCart Verified Grounded Engine.');
+      generatedText = generateDeterministicGroundedAnswer(userQuery, parsed, matchedProducts, policyChunks, updatedConstraints);
+    } else {
+      try {
+        const ai = new GoogleGenAI({
+          apiKey: process.env.GEMINI_API_KEY,
+          httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+        });
 
-    const ai = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-    });
+        const primaryModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+        const modelsToTry = Array.from(new Set([primaryModel, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite']));
 
-    const primaryModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-    const modelsToTry = Array.from(new Set([primaryModel, 'gemini-3.8-flash', 'gemini-flash-latest']));
-
-    const systemInstruction = `You are TrustCart AI, an evidence-grounded conversational shopping assistant.
+        const systemInstruction = `You are TruthCart AI, an evidence-grounded conversational shopping assistant.
 CRITICAL GROUNDING RULES:
 1. ONLY make factual claims that are supported by the provided EVIDENCE CONTEXT below.
 2. Exact product prices, ratings, and specifications must match the evidence context exactly (e.g. if Sony WH-1000XM5 is $399.99, state exactly $399.99).
@@ -364,23 +362,23 @@ CRITICAL GROUNDING RULES:
 6. When the user's shopping request cannot be fulfilled due to budget or stock, clearly explain the constraint or recommend the closest verified match.
 7. Be concise, direct, helpful, and cite product titles and prices accurately.`;
 
-    const contextText = retrievedChunks.length > 0
-      ? retrievedChunks.map(c => `[SOURCE: ${c.sourceTitle} | ${c.section}]\n${c.content}`).join('\n\n')
-      : 'No matching products or policy clauses found in catalogue.';
+        const contextText = retrievedChunks.length > 0
+          ? retrievedChunks.map(c => `[SOURCE: ${c.sourceTitle} | ${c.section}]\n${c.content}`).join('\n\n')
+          : 'No matching products or policy clauses found in catalogue.';
 
-    // Construct multi-turn contents
-    const contents: any[] = [];
-    const recentHistory = (history || []).slice(-6);
-    for (const h of recentHistory) {
-      if (h?.role === 'user') {
-        contents.push({ role: 'user', parts: [{ text: h.content }] });
-      } else if (h?.role === 'assistant' && !h.isError && h.content) {
-        contents.push({ role: 'model', parts: [{ text: h.content }] });
-      }
-    }
+        // Construct multi-turn contents
+        const contents: any[] = [];
+        const recentHistory = (history || []).slice(-6);
+        for (const h of recentHistory) {
+          if (h?.role === 'user') {
+            contents.push({ role: 'user', parts: [{ text: h.content }] });
+          } else if (h?.role === 'assistant' && !h.isError && h.content) {
+            contents.push({ role: 'model', parts: [{ text: h.content }] });
+          }
+        }
 
-    // Add current user prompt with retrieved evidence
-    const currentPrompt = `User Shopping Query: "${userQuery}"
+        // Add current user prompt with retrieved evidence
+        const currentPrompt = `User Shopping Query: "${userQuery}"
 Active Applied Constraints: ${JSON.stringify(updatedConstraints)}
 
 EVIDENCE CONTEXT FROM CANONICAL CATALOGUE & POLICIES:
@@ -388,45 +386,50 @@ ${contextText}
 
 Provide an authentic, factual, evidence-grounded response to the user based on the evidence above:`;
 
-    contents.push({ role: 'user', parts: [{ text: currentPrompt }] });
+        contents.push({ role: 'user', parts: [{ text: currentPrompt }] });
 
-    // Multi-model retry cascade
-    let geminiResponse: any = null;
-    let lastError: any = null;
+        // Multi-model retry cascade
+        let geminiResponse: any = null;
+        let lastError: any = null;
 
-    for (const targetModel of modelsToTry) {
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          geminiResponse = await ai.models.generateContent({
-            model: targetModel,
-            contents,
-            config: {
-              systemInstruction,
-              temperature: 0.2
+        for (const targetModel of modelsToTry) {
+          for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+              geminiResponse = await ai.models.generateContent({
+                model: targetModel,
+                contents,
+                config: {
+                  systemInstruction,
+                  temperature: 0.2
+                }
+              });
+              if (geminiResponse && geminiResponse.text) {
+                generatedText = geminiResponse.text;
+                break;
+              }
+            } catch (err: any) {
+              lastError = err;
+              console.warn(`[Gemini API] Attempt ${attempt} failed on model ${targetModel}:`, err?.status || err?.message || err);
+              const isTransient = err?.status === 503 || err?.message?.includes('503') || err?.message?.includes('high demand') || err?.code === 'ECONNRESET';
+              if (isTransient && attempt === 1) {
+                await new Promise(res => setTimeout(res, 500));
+              } else {
+                break; // Try next model in candidates list
+              }
             }
-          });
-          if (geminiResponse && geminiResponse.text) {
-            generatedText = geminiResponse.text;
-            break;
           }
-        } catch (err: any) {
-          lastError = err;
-          console.warn(`[Gemini API] Attempt ${attempt} failed on model ${targetModel}:`, err?.message || err);
-          const isTransient = err?.status === 503 || err?.message?.includes('503') || err?.message?.includes('high demand') || err?.code === 'ECONNRESET';
-          if (isTransient && attempt === 1) {
-            await new Promise(res => setTimeout(res, 500));
-          } else {
-            break; // Try next model in candidates list
-          }
+          if (generatedText) break;
         }
-      }
-      if (generatedText) break;
-    }
 
-    // If all Gemini online attempts fail, perform flawless fallback to Deterministic Grounded Generator
-    if (!generatedText) {
-      console.warn('[Gemini API] All online Gemini attempts failed or rate-limited. Falling back to TruthCart Verified Grounded Engine.', lastError?.message);
-      generatedText = generateDeterministicGroundedAnswer(userQuery, parsed, matchedProducts, policyChunks, updatedConstraints);
+        // If all Gemini online attempts fail, perform flawless fallback to Deterministic Grounded Generator
+        if (!generatedText) {
+          console.warn('[Gemini API] All online Gemini attempts failed or rate-limited. Falling back to TruthCart Verified Grounded Engine.', lastError?.message);
+          generatedText = generateDeterministicGroundedAnswer(userQuery, parsed, matchedProducts, policyChunks, updatedConstraints);
+        }
+      } catch (err: any) {
+        console.warn('[Gemini API] Error during SDK initialization or invocation. Falling back to TruthCart Verified Grounded Engine.', err?.message);
+        generatedText = generateDeterministicGroundedAnswer(userQuery, parsed, matchedProducts, policyChunks, updatedConstraints);
+      }
     }
   } else {
     // Deterministic Evidence-Backed Generator (Offline Adapter)

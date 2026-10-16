@@ -67,20 +67,20 @@ export function parseQuery(queryText: string, activeConstraints?: UserConstraint
     intent = 'product_comparison';
   }
 
-  // 2. Extract Budget constraints (e.g. "under $500", "below 800", "budget 1000", "less than $400")
+  // 2. Extract Budget constraints (e.g. "under $500", "below 800", "under ₹2,000", "budget 1000", "less than $400")
   let extractedMaxBudget = activeConstraints?.maxBudget;
   let extractedMinBudget = activeConstraints?.minBudget;
 
-  const budgetRegex = /(?:under|below|less than|max|within|budget of)\s*\$?(\d+(?:\.\d{2})?)/i;
+  const budgetRegex = /(?:under|below|less than|max|within|budget of)\s*(?:[\$\₹\€\£]|inr|usd)?\s*(\d[\d,]*)(?:\.\d{2})?/i;
   const budgetMatch = queryText.match(budgetRegex);
   if (budgetMatch && budgetMatch[1]) {
-    extractedMaxBudget = parseFloat(budgetMatch[1]);
+    extractedMaxBudget = parseFloat(budgetMatch[1].replace(/,/g, ''));
   }
 
-  const minBudgetRegex = /(?:above|more than|at least|minimum of)\s*\$?(\d+(?:\.\d{2})?)/i;
+  const minBudgetRegex = /(?:above|more than|at least|minimum of)\s*(?:[\$\₹\€\£]|inr|usd)?\s*(\d[\d,]*)(?:\.\d{2})?/i;
   const minMatch = queryText.match(minBudgetRegex);
   if (minMatch && minMatch[1]) {
-    extractedMinBudget = parseFloat(minMatch[1]);
+    extractedMinBudget = parseFloat(minMatch[1].replace(/,/g, ''));
   }
 
   // 3. Extract Brand

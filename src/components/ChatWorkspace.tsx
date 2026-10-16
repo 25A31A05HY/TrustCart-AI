@@ -246,12 +246,12 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           </div>
         )}
 
-        {messages.map((msg) => (
+        {messages.filter(Boolean).map((msg) => (
           <div
-            key={msg.id}
-            className={`flex items-start space-x-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            key={msg.id || Math.random().toString()}
+            className={`flex items-start space-x-3 ${msg?.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
-            <div className={`max-w-2xl space-y-3 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+            <div className={`max-w-2xl space-y-3 ${msg?.role === 'user' ? 'items-end' : 'items-start'}`}>
               
               {/* Message Bubble */}
               <div

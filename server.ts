@@ -50,7 +50,7 @@ async function startServer() {
   app.get('/api/readiness', (req: Request, res: Response) => {
     const status = indexStore.getStatus();
     const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY');
-    const configuredModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+    const configuredModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
     res.json({
       ready: status.initialized && status.productCount > 0,
       indexStatus: status,
@@ -108,7 +108,7 @@ async function startServer() {
       res.json(response);
     } catch (err: any) {
       console.error('Error in /api/chat:', err);
-      const status = typeof err?.status === 'number' && err.status >= 400 && err.status < 600 ? err.status : 500;
+      const status = typeof err?.status === 'number' && err.status >= 500 && err.status < 600 ? err.status : 500;
       res.status(status).json({
         error: true,
         message: err?.message || 'Internal shopping assistant processing error',

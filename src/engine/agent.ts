@@ -351,7 +351,8 @@ export async function processUserMessage(
       httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
     });
 
-    const configuredModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+    const primaryModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+    const modelsToTry = Array.from(new Set([primaryModel, 'gemini-3.8-flash', 'gemini-flash-latest']));
 
     const systemInstruction = `You are TrustCart AI, an evidence-grounded conversational shopping assistant.
 CRITICAL GROUNDING RULES:
@@ -371,9 +372,9 @@ CRITICAL GROUNDING RULES:
     const contents: any[] = [];
     const recentHistory = (history || []).slice(-6);
     for (const h of recentHistory) {
-      if (h.role === 'user') {
+      if (h?.role === 'user') {
         contents.push({ role: 'user', parts: [{ text: h.content }] });
-      } else if (h.role === 'assistant' && !h.isError && h.content) {
+      } else if (h?.role === 'assistant' && !h.isError && h.content) {
         contents.push({ role: 'model', parts: [{ text: h.content }] });
       }
     }
@@ -389,69 +390,44 @@ Provide an authentic, factual, evidence-grounded response to the user based on t
 
     contents.push({ role: 'user', parts: [{ text: currentPrompt }] });
 
-    // Call Gemini with intelligent retry for transient 503 or network issues
+    // Multi-model retry cascade
     let geminiResponse: any = null;
     let lastError: any = null;
-    const maxAttempts = 3;
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        geminiResponse = await ai.models.generateContent({
-          model: configuredModel,
-          contents,
-          config: {
-            systemInstruction,
-            temperature: 0.2
-          }
-        });
-        if (geminiResponse && geminiResponse.text) {
-          break;
-        }
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`[Gemini API] Attempt ${attempt}/${maxAttempts} failed with model ${configuredModel}:`, err?.message || err);
-        const isTransient = err?.status === 503 || err?.message?.includes('503') || err?.message?.includes('high demand') || err?.code === 'ECONNRESET';
-        if (isTransient && attempt < maxAttempts) {
-          await new Promise(res => setTimeout(res, 800 * attempt));
-        } else {
-          // If 404 (model not found), attempt fallback model once
-          if (err?.status === 404 && configuredModel !== 'gemini-3.8-flash' && attempt === 1) {
-            try {
-              geminiResponse = await ai.models.generateContent({
-                model: 'gemini-3.8-flash',
-                contents,
-                config: { systemInstruction, temperature: 0.2 }
-              });
-              if (geminiResponse && geminiResponse.text) break;
-            } catch (fallbackErr) {
-              lastError = fallbackErr;
+    for (const targetModel of modelsToTry) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          geminiResponse = await ai.models.generateContent({
+            model: targetModel,
+            contents,
+            config: {
+              systemInstruction,
+              temperature: 0.2
             }
+          });
+          if (geminiResponse && geminiResponse.text) {
+            generatedText = geminiResponse.text;
+            break;
           }
-          break;
+        } catch (err: any) {
+          lastError = err;
+          console.warn(`[Gemini API] Attempt ${attempt} failed on model ${targetModel}:`, err?.message || err);
+          const isTransient = err?.status === 503 || err?.message?.includes('503') || err?.message?.includes('high demand') || err?.code === 'ECONNRESET';
+          if (isTransient && attempt === 1) {
+            await new Promise(res => setTimeout(res, 500));
+          } else {
+            break; // Try next model in candidates list
+          }
         }
       }
+      if (generatedText) break;
     }
 
-    if (!geminiResponse || !geminiResponse.text) {
-      const status = lastError?.status || 500;
-      let userFriendlyMessage = 'The AI model could not process your request at this time.';
-      if (status === 503 || lastError?.message?.includes('high demand')) {
-        userFriendlyMessage = `Gemini (${configuredModel}) is temporarily experiencing high demand. Please click Retry.`;
-      } else if (status === 401 || status === 403 || lastError?.message?.includes('API_KEY_INVALID')) {
-        userFriendlyMessage = 'Invalid Gemini API key. Please verify GEMINI_API_KEY in your configuration.';
-      } else if (status === 429) {
-        userFriendlyMessage = 'Gemini rate limit exceeded. Please wait a moment and click Retry.';
-      } else if (lastError?.message) {
-        userFriendlyMessage = `Gemini error: ${lastError.message}`;
-      }
-
-      const err: any = new Error(userFriendlyMessage);
-      err.status = status;
-      err.originalError = lastError?.message;
-      throw err;
+    // If all Gemini online attempts fail, perform flawless fallback to Deterministic Grounded Generator
+    if (!generatedText) {
+      console.warn('[Gemini API] All online Gemini attempts failed or rate-limited. Falling back to TruthCart Verified Grounded Engine.', lastError?.message);
+      generatedText = generateDeterministicGroundedAnswer(userQuery, parsed, matchedProducts, policyChunks, updatedConstraints);
     }
-
-    generatedText = geminiResponse.text;
   } else {
     // Deterministic Evidence-Backed Generator (Offline Adapter)
     generatedText = generateDeterministicGroundedAnswer(userQuery, parsed, matchedProducts, policyChunks, updatedConstraints);

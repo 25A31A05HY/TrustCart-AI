@@ -85,7 +85,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: text,
-          history: messages.filter(m => !m.isError),
+          history: messages.filter(m => m && !m.isError),
           constraints: activeConstraints,
           engineMode
         })
@@ -111,9 +111,11 @@ export default function App() {
         return;
       }
 
-      setMessages((prev) => [...prev, data.message]);
+      if (data?.message) {
+        setMessages((prev) => [...prev, data.message]);
+      }
 
-      if (data.updatedConstraints) {
+      if (data?.updatedConstraints) {
         setActiveConstraints(data.updatedConstraints);
       }
     } catch (err: any) {
@@ -138,9 +140,9 @@ export default function App() {
 
   // Retry last user message without duplicating history
   const handleRetryLastMessage = async () => {
-    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+    const lastUserMsg = [...messages].reverse().find(m => m?.role === 'user');
     if (!lastUserMsg) return;
-    setMessages(prev => prev.filter(m => !m.isError));
+    setMessages(prev => prev.filter(m => m && !m.isError));
     await handleSendMessage(lastUserMsg.content, true);
   };
 
@@ -221,7 +223,7 @@ export default function App() {
     showToast('Conversation session and multi-turn constraints reset.');
   };
 
-  const latestAssistantMessage = [...messages].reverse().find((m) => m.role === 'assistant');
+  const latestAssistantMessage = [...messages].reverse().find((m) => m?.role === 'assistant');
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-[#1A1A18] flex flex-col font-sans selection:bg-[#2E4032] selection:text-white">

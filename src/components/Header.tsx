@@ -52,10 +52,10 @@ export const Header: React.FC<HeaderProps> = ({
             className="flex items-baseline space-x-2.5 cursor-pointer shrink-0 select-none group"
           >
             <span className="font-serif text-2xl font-bold tracking-tight text-[#1A1A18] group-hover:text-[#2E4032] transition-colors">
-              TrustCart<span className="text-[#3B523F] font-sans text-xl">.</span>
+              TrustShield<span className="text-[#3B523F] font-sans text-xl">.ai</span>
             </span>
             <span className="hidden lg:inline text-xs text-[#7A7870] font-normal tracking-wide">
-              The Assistant That Doesn't Lie
+              The Grounded Shopping Assistant That Doesn&apos;t Lie
             </span>
           </div>
 

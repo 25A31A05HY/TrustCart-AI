@@ -92,17 +92,25 @@ export function verifyClaims(
     }
 
     // A. Price Verification
-    // A. Price Verification
-    // Match assertions like "price: $X", "costs $X", "at $X", "is $X", while ignoring budget constraints like "under $700"
-    const priceAssertMatch = prop.match(/(?:price\s*(?:is|:)?|costs|at|is)\s*\$(\d+(?:\.\d{2})?)/i);
-    const anyPriceMatch = prop.match(/\$(\d+(?:\.\d{2})?)/);
+    // Check if this proposition is about policy, shipping, or fees rather than product purchase pricing
+    const isPolicyOrFeeClaim = /shipping|threshold|order exceeds|orders over|minimum (?:order|threshold)|restocking fee|flat rate|pol-|tax|fee of/i.test(prop);
+    const isSavingsOrDiscount = /saving|save|discount of|discounted from/i.test(prop);
     
-    // Check if the price mentioned is an explicit budget qualifier (e.g. "under $700", "budget of $500")
-    const isBudgetQualifier = /under\s*\$\d+|budget(?:\s*of|\s*:)?\s*\$\d+/i.test(prop);
+    // Check if the price mentioned is an explicit budget qualifier (e.g. "under $700", "under ₹2,000", "budget of $500")
+    const isBudgetQualifier = /under\s*(?:[\$\₹]|inr|usd)?\s*\d+|budget(?:\s*of|\s*:)?\s*(?:[\$\₹]|inr|usd)?\s*\d+|below\s*(?:[\$\₹]|inr|usd)?\s*\d+/i.test(prop);
 
-    if ((priceAssertMatch || anyPriceMatch) && productEvaluated && !isBudgetQualifier) {
-      const statedPrice = parseFloat((priceAssertMatch ? priceAssertMatch[1] : anyPriceMatch![1]));
+    // Match assertions like "price: $X" or "price is $X", "costs $X", "at $X", "priced at $X", "retail is $X"
+    const priceAssertMatch = prop.match(/(?:price\s*(?:is|:|\s)|costs|priced\s*at|retails?\s*(?:for|at)|is)\s*(?:[\$\₹]|inr|usd)?\s*(\d[\d,]*(?:\.\d{2})?)/i);
+    // If the product was explicitly named in the proposition (not just inherited), allow loose currency match
+    const isProductExplicitlyNamed = Boolean(productEvaluated && (propLower.includes(productEvaluated.title.toLowerCase()) || propLower.includes(productEvaluated.brand.toLowerCase())));
+    const anyPriceMatch = isProductExplicitlyNamed ? (prop.match(/(?:[\$\₹]|inr|usd)\s*(\d[\d,]*(?:\.\d{2})?)/i) || prop.match(/\$(\d+(?:\.\d{2})?)/)) : null;
+
+    if ((priceAssertMatch || anyPriceMatch) && productEvaluated && !isBudgetQualifier && !isPolicyOrFeeClaim && !isSavingsOrDiscount) {
+      const rawPriceStr = (priceAssertMatch ? priceAssertMatch[1] : anyPriceMatch![1]).replace(/,/g, '');
+      const statedPrice = parseFloat(rawPriceStr);
       const actualPrice = productEvaluated.price;
+
+      const currSym = productEvaluated.currency === 'INR' ? '₹' : '$';
 
       if (Math.abs(statedPrice - actualPrice) < 0.05) {
         status = 'VERIFIED';
@@ -113,11 +121,11 @@ export function verifyClaims(
           sourceId: productEvaluated.id,
           sourceTitle: `${productEvaluated.title} Spec Sheet`,
           type: 'product_spec',
-          snippet: `Current verified catalogue price is $${productEvaluated.price.toFixed(2)} ${productEvaluated.currency}`,
+          snippet: `Current verified catalogue price is ${currSym}${productEvaluated.price.toFixed(2)} ${productEvaluated.currency}`,
           exactMatch: true,
           confidence: 1.0
         };
-      } else if (propLower.includes('not $') || propLower.includes('not ' + statedPrice) || propLower.includes('cannot confirm')) {
+      } else if (propLower.includes('not $') || propLower.includes('not ₹') || propLower.includes('not ' + statedPrice) || propLower.includes('cannot confirm')) {
         // Refutation of false price is a VERIFIED claim!
         status = 'VERIFIED';
         confidence = 1.0;
@@ -127,7 +135,7 @@ export function verifyClaims(
           sourceId: productEvaluated.id,
           sourceTitle: `${productEvaluated.title} Spec Sheet`,
           type: 'product_spec',
-          snippet: `Verified catalogue price is $${actualPrice.toFixed(2)}, confirming unverified price $${statedPrice.toFixed(2)} is false.`,
+          snippet: `Verified catalogue price is ${currSym}${actualPrice.toFixed(2)}, confirming unverified price ${currSym}${statedPrice.toFixed(2)} is false.`,
           exactMatch: true,
           confidence: 1.0
         };
@@ -135,7 +143,7 @@ export function verifyClaims(
         // Direct price discrepancy asserted as fact -> CONTRADICTION!
         status = 'CONTRADICTED';
         confidence = 0.0;
-        contradictionExplanation = `Catalogue contradiction: ${productEvaluated.title} is listed at $${actualPrice.toFixed(2)}, not $${statedPrice.toFixed(2)}.`;
+        contradictionExplanation = `Catalogue contradiction: ${productEvaluated.title} is listed at ${currSym}${actualPrice.toFixed(2)} ${productEvaluated.currency}, not ${currSym}${statedPrice.toFixed(2)}.`;
         contradictionAlerts.push(contradictionExplanation);
       }
     }

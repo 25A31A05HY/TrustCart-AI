@@ -108,12 +108,12 @@ async function startServer() {
       res.json(response);
     } catch (err: any) {
       console.error('Error in /api/chat:', err);
-      const status = typeof err?.status === 'number' && err.status >= 500 && err.status < 600 ? err.status : 500;
+      const status = typeof err?.status === 'number' && err.status >= 400 && err.status < 600 ? err.status : 500;
       res.status(status).json({
         error: true,
         message: err?.message || 'Internal shopping assistant processing error',
         details: err?.originalError || err?.message,
-        retryable: status === 503 || status === 429 || status === 500
+        retryable: status === 503 || status === 429 || status === 500 || err?.code === 'ECONNRESET'
       });
     }
   });

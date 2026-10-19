@@ -84,7 +84,7 @@ export function parseQuery(queryText: string, activeConstraints?: UserConstraint
   }
 
   // 3. Extract Brand
-  const knownBrands = ['Sony', 'Apple', 'Bose', 'Dell', 'Lenovo', 'ASUS', 'Acer', 'Samsung', 'Google', 'Garmin', 'WHOOP', 'Roborock', 'Dyson', 'Breville', 'LG', 'Logitech', 'Herman Miller', 'GoPro', 'Amazon', 'Anker'];
+  const knownBrands = ['Sony', 'Apple', 'Bose', 'Dell', 'Lenovo', 'ASUS', 'Acer', 'Samsung', 'Google', 'Garmin', 'WHOOP', 'Roborock', 'Dyson', 'Breville', 'LG', 'Logitech', 'Herman Miller', 'GoPro', 'Amazon', 'Anker', 'Puma', 'Nike', 'Sparx'];
   let extractedBrand = activeConstraints?.brand;
   for (const b of knownBrands) {
     if (lower.includes(b.toLowerCase())) {
@@ -99,6 +99,7 @@ export function parseQuery(queryText: string, activeConstraints?: UserConstraint
     'Laptops': ['laptop', 'laptops', 'ultrabook', 'notebook', 'macbook', 'thinkpad', 'computer'],
     'Smartphones': ['phone', 'phones', 'smartphone', 'smartphones', 'iphone', 'galaxy', 'pixel'],
     'Wearables': ['watch', 'smartwatch', 'tracker', 'fitness tracker', 'wearable', 'whoop', 'forerunner'],
+    'Footwear': ['shoe', 'shoes', 'footwear', 'sneaker', 'sneakers', 'running shoe', 'running shoes'],
     'Home Appliances': ['vacuum', 'vacuums', 'robot vacuum', 'espresso', 'coffee maker', 'coffee machine', 'dyson', 'mop'],
     'Displays': ['monitor', 'monitors', 'display', 'screen', '4k monitor', 'oled monitor'],
     'Accessories': ['mouse', 'keyboard', 'peripherals'],
@@ -208,9 +209,18 @@ export function hybridRetrieve(
     combinedScore?: number;
   }> = [];
 
+  const hasProductIntent = Boolean(
+    parsed.extractedBrand ||
+    parsed.extractedCategory ||
+    parsed.extractedMaxBudget ||
+    parsed.extractedMinBudget ||
+    parsed.extractedFeatures.length > 0 ||
+    parsed.rawQuery.toLowerCase().match(/(sony|bose|apple|macbook|dell|lenovo|asus|acer|galaxy|pixel|whoop|dyson|breville|lg|logitech|herman|gopro|kindle|puma|nike|sparx|laptop|phone|headphone|earbud|watch|camera|monitor|mouse|vacuum|chair|shoe|shoes)/i)
+  );
+
   for (const chunk of allChunks) {
-    // If it's a policy query, filter out non-policy chunks unless no policy match found
-    if (parsed.isPolicyQuery && chunk.type !== 'policy_clause' && !parsed.rawQuery.toLowerCase().includes('product')) {
+    // If it's an exclusively general policy query with no product intent, filter out non-policy chunks
+    if (parsed.isPolicyQuery && !hasProductIntent && chunk.type !== 'policy_clause') {
       continue;
     }
 
@@ -339,10 +349,10 @@ export function hybridRetrieve(
     }
   }
 
-  // If matchedProducts is empty but product chunks exist in candidateScores, collect top matching products
-  if (matchedProducts.length === 0) {
+  // If matchedProducts is empty but product chunks exist in candidateScores with relevant score, collect matching products
+  if (matchedProducts.length === 0 && hasProductIntent) {
     for (const item of candidateScores) {
-      if (item.chunk.metadata.productId) {
+      if (item.chunk.metadata.productId && (item.combinedScore || 0) > 0.08) {
         const prod = indexStore.getProductById(item.chunk.metadata.productId);
         if (prod && !matchedProductIds.has(prod.id)) {
           if (parsed.extractedMaxBudget !== undefined && prod.price > parsed.extractedMaxBudget) continue;
@@ -358,7 +368,7 @@ export function hybridRetrieve(
 
   // 4. Distinguish failure causes
   let retrievalFailureReason: RetrievalPackage['retrievalFailureReason'] = undefined;
-  if (finalResults.length === 0) {
+  if (finalResults.length === 0 || (hasProductIntent && matchedProducts.length === 0)) {
     if (parsed.extractedMaxBudget !== undefined && candidateScores.some(c => c.chunk.metadata.price && c.chunk.metadata.price > parsed.extractedMaxBudget!)) {
       retrievalFailureReason = 'budget_exceeded';
     } else if (parsed.inStockRequired && candidateScores.some(c => c.chunk.metadata.inStock === false)) {

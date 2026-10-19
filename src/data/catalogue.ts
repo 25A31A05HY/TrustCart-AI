@@ -1281,5 +1281,150 @@ export const CATALOGUE: Product[] = [
       { id: 'shp-std', name: 'Standard Shipping', daysMin: 3, daysMax: 5, cost: 0.0, carrier: 'UPS' }
     ],
     tags: ['kindle', 'ereader', 'e-ink', 'oasis', 'waterproof', 'page turn buttons', 'out of stock']
+  },
+  {
+    id: 'prod-025',
+    sku: 'PUM-VELNIT-1899',
+    title: "Puma Velocity Nitro 3 Men's Running Shoes",
+    brand: 'Puma',
+    category: 'Footwear',
+    subcategory: 'Running Shoes',
+    price: 1899.00,
+    originalPrice: 2499.00,
+    currency: 'INR',
+    rating: 4.6,
+    reviewCount: 520,
+    inStock: true,
+    stockCount: 22,
+    leadTimeDays: 2,
+    imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80',
+    specs: {
+      cushioning: 'NITRO FOAM advanced nitrogen-infused lightweight midsole',
+      outsole: 'PUMAGRIP all-surface high-traction durable rubber',
+      weightGrams: 260,
+      dropMm: 8,
+      closure: 'Lace-up engineered stability cage',
+      terrain: 'Road and paved trail running',
+      upperMaterial: 'Engineered breathable multi-layer mesh'
+    },
+    keyFeatures: [
+      'NITRO FOAM nitrogen-injected midsole delivers superior responsiveness and featherlight cushioning',
+      'PUMAGRIP high-durability rubber compound provides multi-surface traction in wet and dry conditions',
+      'Engineered mesh upper keeps feet cool during high-mileage morning runs',
+      'TPU heel clip stabilizes the foot through natural gait transitions'
+    ],
+    reviews: [
+      {
+        id: 'rev-026',
+        author: 'Rohan Sharma',
+        rating: 5,
+        date: '2026-08-22',
+        title: 'Outstanding value for 10K road training',
+        text: 'Responsive cushioning without being overly mushy. Fits true to size and grip on wet asphalt is rock solid. Incredible quality under ₹2,000.',
+        verifiedPurchase: true,
+        helpfulCount: 48
+      }
+    ],
+    warrantyMonths: 6,
+    returnWindowDays: 30,
+    shippingOptions: [
+      { id: 'shp-std', name: 'Free Standard Ground', daysMin: 2, daysMax: 4, cost: 0.0, carrier: 'BlueDart' },
+      { id: 'shp-exp', name: 'Express Air Courier', daysMin: 1, daysMax: 2, cost: 149.0, carrier: 'BlueDart Air' }
+    ],
+    tags: ['shoes', 'running shoes', 'footwear', 'puma', 'under 2000', 'nitro', 'mens running']
+  },
+  {
+    id: 'prod-026',
+    sku: 'SPX-HYPGRP-1299',
+    title: "Sparx Hyper-Grip Lightweight Mesh Running Shoes",
+    brand: 'Sparx',
+    category: 'Footwear',
+    subcategory: 'Running Shoes',
+    price: 1299.00,
+    originalPrice: 1599.00,
+    currency: 'INR',
+    rating: 4.4,
+    reviewCount: 840,
+    inStock: true,
+    stockCount: 35,
+    leadTimeDays: 2,
+    imageUrl: 'https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?auto=format&fit=crop&w=600&q=80',
+    specs: {
+      soleMaterial: 'Compression-molded EVA shock-absorbing foam',
+      upperMaterial: 'Breathable honeycomb knitted mesh',
+      weightGrams: 235,
+      closure: 'Reinforced eyelet lacing',
+      insole: 'Cushioned removable memory-foam footbed'
+    },
+    keyFeatures: [
+      'Ultra-lightweight EVA sole absorbs repetitive road impacts during daily jogs',
+      'Breathable knitted honeycomb upper prevents heat accumulation in warm climates',
+      'Textured slip-resistant traction pattern provides reliable grip on concrete tracks'
+    ],
+    reviews: [
+      {
+        id: 'rev-027',
+        author: 'Arun Patel',
+        rating: 4,
+        date: '2026-09-05',
+        title: 'Very light and comfortable for everyday running',
+        text: 'Great daily training shoe for morning park runs. Extremely lightweight and durable for the price.',
+        verifiedPurchase: true,
+        helpfulCount: 31
+      }
+    ],
+    warrantyMonths: 3,
+    returnWindowDays: 30,
+    shippingOptions: [
+      { id: 'shp-std', name: 'Free Standard Ground', daysMin: 2, daysMax: 4, cost: 0.0, carrier: 'Delhivery' }
+    ],
+    tags: ['shoes', 'running shoes', 'footwear', 'sparx', 'budget', 'under 1500', 'under 2000', 'lightweight']
+  },
+  {
+    id: 'prod-027',
+    sku: 'NIK-PEG40-3499',
+    title: 'Nike Air Zoom Pegasus 40 Road Running Shoes',
+    brand: 'Nike',
+    category: 'Footwear',
+    subcategory: 'Running Shoes',
+    price: 3499.00,
+    originalPrice: 3999.00,
+    currency: 'INR',
+    rating: 4.8,
+    reviewCount: 1650,
+    inStock: true,
+    stockCount: 14,
+    leadTimeDays: 3,
+    imageUrl: 'https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?auto=format&fit=crop&w=600&q=80',
+    specs: {
+      cushioning: 'Dual Zoom Air units (forefoot and heel) with Nike React foam',
+      dropMm: 10,
+      weightGrams: 285,
+      upper: 'Single-layer engineered circular mesh with midfoot band lockdown',
+      outsole: 'Waffle-inspired carbon rubber outsole'
+    },
+    keyFeatures: [
+      'Dual Zoom Air units deliver springy energetic toe-off and balanced heel cushioning',
+      'Nike React lightweight foam offers resilient longevity across marathon distances',
+      'Redesigned midfoot strap provides secure customized arch lockdown'
+    ],
+    reviews: [
+      {
+        id: 'rev-028',
+        author: 'Vikas Mehra',
+        rating: 5,
+        date: '2026-07-14',
+        title: 'The gold standard marathon workhorse',
+        text: 'Clocked over 300km on these Pegasus 40s. The dual Zoom Air units provide the best energy return on long tempo runs.',
+        verifiedPurchase: true,
+        helpfulCount: 65
+      }
+    ],
+    warrantyMonths: 12,
+    returnWindowDays: 30,
+    shippingOptions: [
+      { id: 'shp-std', name: 'Free Insured Express', daysMin: 2, daysMax: 3, cost: 0.0, carrier: 'BlueDart Air' }
+    ],
+    tags: ['shoes', 'running shoes', 'footwear', 'nike', 'pegasus', 'premium', 'marathon']
   }
 ];

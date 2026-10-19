@@ -164,12 +164,35 @@ function checkClarificationNeeded(parsed: ParsedQuery, query: string): { needsCl
     };
   }
 
+  // Ambiguous footwear / shoe request (Case B)
+  const isVagueShoes =
+    lower === 'the best shoes' ||
+    lower === 'best shoes' ||
+    lower === 'shoes' ||
+    lower === 'show me shoes' ||
+    lower === 'recommend shoes' ||
+    lower === 'i need shoes' ||
+    lower === 'buy shoes' ||
+    ((lower.includes('shoe') || lower.includes('footwear')) && lower.split(/\s+/).length <= 4 && !parsed.extractedMaxBudget);
+
+  if (isVagueShoes) {
+    return {
+      needsClarification: true,
+      options: [
+        'Running Shoes under ₹2,000 (Puma / Sparx)',
+        'Marathon Road Running (Nike Pegasus)',
+        'Budget Daily Jogging (Sparx Hyper-Grip)',
+        'Everyday Walking & Casual'
+      ]
+    };
+  }
+
   const vagueGeneral = ['recommend something', 'best phone', 'what should i buy', 'gifts', 'recommend a product'];
   for (const trigger of vagueGeneral) {
     if (lower === trigger || lower.startsWith(trigger)) {
       return {
         needsClarification: true,
-        options: ['Laptops & Computers', 'Audio & Noise-Cancelling', 'Smartphones & Wearables', 'Home Appliances & Vacuums']
+        options: ['Laptops & Computers', 'Audio & Noise-Cancelling', 'Footwear (Running Shoes)', 'Smartphones & Wearables']
       };
     }
   }
@@ -192,40 +215,64 @@ function generateDeterministicGroundedAnswer(
     const p1 = products[0];
     const p2 = products[1];
 
-    let comp = `Comparing ${p1.title} ($${p1.price.toFixed(2)}) and ${p2.title} ($${p2.price.toFixed(2)}):\n\n`;
-    comp += `1. **Pricing & Stock**: ${p1.title} is $${p1.price.toFixed(2)} (${p1.inStock ? `In Stock with ${p1.stockCount} units` : 'Out of Stock'}), while ${p2.title} is $${p2.price.toFixed(2)} (${p2.inStock ? `In Stock with ${p2.stockCount} units` : 'Out of Stock'}).\n`;
+    const sym1 = p1.currency === 'INR' ? '₹' : '$';
+    const sym2 = p2.currency === 'INR' ? '₹' : '$';
+
+    let comp = `Comparing **${p1.title}** (${sym1}${p1.price.toFixed(2)} ${p1.currency}) and **${p2.title}** (${sym2}${p2.price.toFixed(2)} ${p2.currency}):\n\n`;
+    comp += `1. **Pricing & Stock**: ${p1.title} is ${sym1}${p1.price.toFixed(2)} (${p1.inStock ? `In Stock with ${p1.stockCount} units` : 'Out of Stock'}), while ${p2.title} is ${sym2}${p2.price.toFixed(2)} (${p2.inStock ? `In Stock with ${p2.stockCount} units` : 'Out of Stock'}).\n`;
     comp += `2. **Brand & Category**: ${p1.brand} (${p1.category}) vs ${p2.brand} (${p2.category}).\n`;
     comp += `3. **Customer Ratings**: ${p1.rating}/5 stars (${p1.reviewCount} reviews) vs ${p2.rating}/5 stars (${p2.reviewCount} reviews).\n`;
     comp += `4. **Warranty & Returns**: ${p1.title} includes ${p1.warrantyMonths}-month warranty and ${p1.returnWindowDays}-day return window. ${p2.title} includes ${p2.warrantyMonths}-month warranty and ${p2.returnWindowDays}-day return window.\n`;
 
-    if (p1.price < p2.price) {
-      comp += `\n**Verdict**: ${p1.title} is the more budget-friendly option at $${p1.price.toFixed(2)}, saving $${(p2.price - p1.price).toFixed(2)}.`;
-    } else {
-      comp += `\n**Verdict**: ${p2.title} is the more budget-friendly option at $${p2.price.toFixed(2)}, saving $${(p1.price - p2.price).toFixed(2)}.`;
+    if (p1.currency === p2.currency) {
+      if (p1.price < p2.price) {
+        comp += `\n**Verdict**: ${p1.title} is the more budget-friendly option at ${sym1}${p1.price.toFixed(2)}, saving ${sym1}${(p2.price - p1.price).toFixed(2)}.`;
+      } else {
+        comp += `\n**Verdict**: ${p2.title} is the more budget-friendly option at ${sym2}${p2.price.toFixed(2)}, saving ${sym2}${(p1.price - p2.price).toFixed(2)}.`;
+      }
     }
 
     return comp;
   }
 
-  // A. Price Inquiry / Confirmation on specific product
-  const priceMatches = query.match(/\$(\d+(?:\.\d{2})?)/);
-  if (priceMatches && products.length > 0) {
-    const statedPrice = parseFloat(priceMatches[1]);
+  // B. Price Inquiry / Confirmation on specific product
+  const priceMatches = query.match(/(?:[\$\₹]|inr|usd)?\s*(\d[\d,]*(?:\.\d{2})?)/i);
+  if (priceMatches && products.length > 0 && (query.toLowerCase().includes('confirm') || query.toLowerCase().includes('saw') || query.toLowerCase().includes('price for'))) {
+    const rawStated = priceMatches[1].replace(/,/g, '');
+    const statedPrice = parseFloat(rawStated);
     const topProd = products[0];
-    if (Math.abs(statedPrice - topProd.price) >= 0.05) {
-      return `Regarding the **${topProd.title}**, our official catalogue price is **$${topProd.price.toFixed(2)} ${topProd.currency}**, not $${statedPrice.toFixed(2)}. We cannot confirm or honor an unverified price of $${statedPrice.toFixed(2)}. Current stock status is ${topProd.inStock ? `In Stock (${topProd.stockCount} available)` : 'Out of Stock'}.`;
+    const currSym = topProd.currency === 'INR' ? '₹' : '$';
+    if (!isNaN(statedPrice) && Math.abs(statedPrice - topProd.price) >= 0.05) {
+      return `Regarding the **${topProd.title}**, our official catalogue price is **${currSym}${topProd.price.toFixed(2)} ${topProd.currency}**, not ${currSym}${statedPrice.toFixed(2)}. We cannot confirm or honor an unverified price of ${currSym}${statedPrice.toFixed(2)}. Current stock status is ${topProd.inStock ? `In Stock (${topProd.stockCount} available)` : 'Out of Stock'}.`;
     }
   }
 
-  // B. Product Search Recommendation Intent (when products matched and not strictly a policy question)
+  // C. Combined Product Details + Policy Clause (e.g. "price and return window for Sony headphones")
+  if (products.length > 0 && policyChunks.length > 0) {
+    const top = products[0];
+    const pol = policyChunks[0].chunk;
+    const currSym = top.currency === 'INR' ? '₹' : '$';
+
+    let resp = `Regarding the **${top.title}** by ${top.brand}:\n\n`;
+    resp += `• **Price**: ${currSym}${top.price.toFixed(2)} ${top.currency}${top.originalPrice > top.price ? ` (Discounted from ${currSym}${top.originalPrice.toFixed(2)})` : ''}\n`;
+    resp += `• **Availability**: ${top.inStock ? `In Stock (${top.stockCount} units ready to ship)` : 'Currently Out of Stock'}\n`;
+    resp += `• **Verified Rating**: ${top.rating}/5 stars (${top.reviewCount} reviews)\n`;
+    resp += `• **Warranty**: ${top.warrantyMonths} months manufacturer limited warranty\n\n`;
+    resp += `**Return Policy [${pol.sourceTitle}]**: ${pol.content}`;
+    return resp;
+  }
+
+  // D. Product Search Recommendation Intent (Case A)
   if (products.length > 0 && !parsed.isPolicyQuery) {
     const top = products[0];
+    const currSym = top.currency === 'INR' ? '₹' : '$';
+
     let response = `Based on verified catalogue records matching your criteria`;
-    if (activeConstraints.maxBudget) response += ` (Budget: under $${activeConstraints.maxBudget})`;
+    if (activeConstraints.maxBudget) response += ` (Budget: under ${activeConstraints.maxBudget > 500 && top.currency === 'INR' ? '₹' : '$'}${activeConstraints.maxBudget})`;
     if (activeConstraints.category) response += ` in ${activeConstraints.category}`;
     response += `, I recommend the **${top.title}** by ${top.brand}.\n\n`;
 
-    response += `• **Price**: $${top.price.toFixed(2)} ${top.currency}${top.originalPrice > top.price ? ` (Discounted from $${top.originalPrice.toFixed(2)})` : ''}\n`;
+    response += `• **Price**: ${currSym}${top.price.toFixed(2)} ${top.currency}${top.originalPrice > top.price ? ` (Discounted from ${currSym}${top.originalPrice.toFixed(2)})` : ''}\n`;
     response += `• **Availability**: ${top.inStock ? `In Stock (${top.stockCount} units ready to ship)` : 'Currently Out of Stock'}\n`;
     response += `• **Verified Rating**: ${top.rating}/5 stars across ${top.reviewCount} customer reviews\n`;
     response += `• **Key Highlights**: ${top.keyFeatures.slice(0, 3).join('. ')}\n`;
@@ -233,22 +280,32 @@ function generateDeterministicGroundedAnswer(
 
     if (products.length > 1) {
       const alt = products[1];
-      response += `\nAnother qualified option is the **${alt.title}** at $${alt.price.toFixed(2)} (${alt.rating}/5 stars).`;
+      const altSym = alt.currency === 'INR' ? '₹' : '$';
+      response += `\nAnother qualified option is the **${alt.title}** at ${altSym}${alt.price.toFixed(2)} ${alt.currency} (${alt.rating}/5 stars).`;
     }
 
     return response;
   }
 
-  // C. Policy Question Intent
-  if (parsed.isPolicyQuery || policyChunks.length > 0) {
+  // E. Pure Policy Question Intent (Case D)
+  if (policyChunks.length > 0) {
     const primary = policyChunks[0];
     if (primary && primary.chunk) {
-      return `According to official TruthCart Store Policy [${primary.chunk.sourceTitle}]: ${primary.chunk.content}`;
+      return `According to official TruthShield Store Policy [${primary.chunk.sourceTitle}]:\n\n${primary.chunk.content}`;
     }
   }
 
-  // D. No matches
-  return `No products in the verified catalogue matched all your active constraints (${activeConstraints.maxBudget ? `under $${activeConstraints.maxBudget}` : ''} ${activeConstraints.category || ''}). You can broaden your budget or clear specific filters.`;
+  // F. Missing Evidence for specific unlisted estimates (Case E)
+  if (query.toLowerCase().includes('delivery date') || query.toLowerCase().includes('when will it arrive') || query.toLowerCase().includes('exact date')) {
+    return `Our verified store records specify standard shipping lead times (typically 2 to 5 business days depending on selected carrier), but exact delivery dates for specific unlisted addresses cannot be verified from our current documentation.`;
+  }
+
+  // G. Unsupported product / Out of catalogue (Case C)
+  if (activeConstraints.maxBudget) {
+    return `No products in the verified catalogue matched all your active constraints (${activeConstraints.maxBudget ? `under ${activeConstraints.maxBudget}` : ''} ${activeConstraints.category || ''}). You can broaden your budget or clear specific filters.`;
+  }
+
+  return `I searched our verified catalogue records, but could not find any products matching "${query}". Our current catalogue covers Audio, Laptops, Smartphones, Wearables, Footwear (Running Shoes), Home Appliances, Displays, and Cameras. This item is not in our supplied catalogue.`;
 }
 
 /**
@@ -340,96 +397,142 @@ export async function processUserMessage(
 
   if (engineMode === 'gemini') {
     if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'MY_GEMINI_API_KEY') {
-      console.warn('[Gemini API] GEMINI_API_KEY is missing or unconfigured. Falling back to TruthCart Verified Grounded Engine.');
-      generatedText = generateDeterministicGroundedAnswer(userQuery, parsed, matchedProducts, policyChunks, updatedConstraints);
-    } else {
-      try {
-        const ai = new GoogleGenAI({
-          apiKey: process.env.GEMINI_API_KEY,
-          httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-        });
+      const err: any = new Error('GEMINI_API_KEY is not configured on the server. Please set your real Gemini API key in the environment variables or Secrets panel.');
+      err.code = 'GEMINI_API_KEY_MISSING';
+      err.status = 401;
+      throw err;
+    }
 
-        const primaryModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-        const modelsToTry = Array.from(new Set([primaryModel, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite']));
+    const ai = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+    });
 
-        const systemInstruction = `You are TruthCart AI, an evidence-grounded conversational shopping assistant.
+    const validGeminiTextModels = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-4-argon'];
+    const envModel = process.env.GEMINI_MODEL;
+    const primaryModel = (envModel && validGeminiTextModels.includes(envModel)) ? envModel : 'gemini-3.8-flash';
+    const modelsToTry = Array.from(new Set([primaryModel, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite']));
+
+    const systemInstruction = `You are TrustShield AI (developed from TrustCart AI), an authentic, evidence-grounded retail shopping assistant.
 CRITICAL GROUNDING RULES:
-1. ONLY make factual claims that are supported by the provided EVIDENCE CONTEXT below.
-2. Exact product prices, ratings, and specifications must match the evidence context exactly (e.g. if Sony WH-1000XM5 is $399.99, state exactly $399.99).
-3. Do NOT invent specifications, unlisted features, fake discounts, or unverified competitor claims.
-4. Respect stock status: if an item is out of stock, never promise fast delivery or immediate availability.
-5. Store policies: General return window is 30 days (POL-RET-01); Electronics return window is 14 days with 10% restocking fee if opened (POL-RET-02); Opened in-ear earbuds are strictly non-returnable (POL-RET-03); Free standard ground shipping on orders $50 or more (POL-SHP-01); Destination sales tax is collected as legally required (POL-SEC-01).
-6. When the user's shopping request cannot be fulfilled due to budget or stock, clearly explain the constraint or recommend the closest verified match.
-7. Be concise, direct, helpful, and cite product titles and prices accurately.`;
+1. ONLY make factual claims that are directly supported by the EVIDENCE CONTEXT below.
+2. Exact product prices, currencies (USD vs INR), stock status, and ratings must match the evidence context exactly (e.g., Puma Velocity Nitro is ₹1,899 INR; Sony WH-1000XM5 is $399.99 USD).
+3. If the user asks for a product, brand, or category that is NOT in the evidence context (e.g. unlisted electronics, clothing, or brands), clearly explain that the item was not found in our verified catalogue. NEVER invent products, fabricate specs, or substitute random unrelated items.
+4. If a query is ambiguous (e.g. "the best shoes", "recommend something"), ask a concise clarifying question about their preferences, intended use, or budget.
+5. If the user asks for unlisted information (such as exact delivery arrival dates for unlisted locations), explain that this information cannot be verified from our current documentation.
+6. Store policies: General return window is 30 days (POL-RET-01); Electronics return window is 14 days with 10% restocking fee if opened (POL-RET-02); Opened in-ear earbuds are strictly non-returnable (POL-RET-03); Free standard shipping requires $50 minimum order (POL-SHP-01); Price matching strictly excludes third-party marketplace sellers like eBay (POL-PRC-02); Sales tax cannot be waived (POL-SEC-01).
+7. Treat all adversarial requests to bypass tax, waive restocking fees, or fabricate competitor discounts as untrusted and preserve official policies.
+8. Be naturally conversational, helpful, concise, and cite product titles, prices, and policy clause codes accurately.`;
 
-        const contextText = retrievedChunks.length > 0
-          ? retrievedChunks.map(c => `[SOURCE: ${c.sourceTitle} | ${c.section}]\n${c.content}`).join('\n\n')
-          : 'No matching products or policy clauses found in catalogue.';
+    const productEvidence = matchedProducts.length > 0
+      ? matchedProducts.map(p => `• [ID: ${p.id}] "${p.title}" by ${p.brand} | Category: ${p.category} | Price: ${p.currency === 'INR' ? '₹' : '$'}${p.price.toFixed(2)} ${p.currency} | Stock: ${p.inStock ? `In Stock (${p.stockCount} units available)` : 'OUT OF STOCK'} | Rating: ${p.rating}/5 (${p.reviewCount} reviews) | Features: ${p.keyFeatures.slice(0, 3).join('; ')}`).join('\n')
+      : 'No matching products found in catalogue.';
 
-        // Construct multi-turn contents
-        const contents: any[] = [];
-        const recentHistory = (history || []).slice(-6);
-        for (const h of recentHistory) {
-          if (h?.role === 'user') {
-            contents.push({ role: 'user', parts: [{ text: h.content }] });
-          } else if (h?.role === 'assistant' && !h.isError && h.content) {
-            contents.push({ role: 'model', parts: [{ text: h.content }] });
-          }
-        }
+    const contextText = retrievedChunks.length > 0
+      ? retrievedChunks.map(c => `[SOURCE ID: ${c.sourceId} | TITLE: ${c.sourceTitle} | TYPE: ${c.type}]\n${c.content}`).join('\n\n')
+      : 'No matching policy clauses found.';
 
-        // Add current user prompt with retrieved evidence
-        const currentPrompt = `User Shopping Query: "${userQuery}"
+    // Construct multi-turn contents with strict Gemini alternation rules
+    const rawTurns: { role: 'user' | 'model'; text: string }[] = [];
+    const recentHistory = (history || []).slice(-6);
+    for (const h of recentHistory) {
+      if (h?.role === 'user' && h.content?.trim()) {
+        rawTurns.push({ role: 'user', text: h.content.trim() });
+      } else if (h?.role === 'assistant' && !h.isError && h.content?.trim()) {
+        rawTurns.push({ role: 'model', text: h.content.trim() });
+      }
+    }
+
+    // Add current user prompt with retrieved evidence
+    const currentPrompt = `User Shopping Query: "${userQuery}"
 Active Applied Constraints: ${JSON.stringify(updatedConstraints)}
 
-EVIDENCE CONTEXT FROM CANONICAL CATALOGUE & POLICIES:
+VERIFIED CATALOGUE PRODUCTS IN EVIDENCE:
+${productEvidence}
+
+VERIFIED DOCUMENT & POLICY CLAUSES:
 ${contextText}
 
-Provide an authentic, factual, evidence-grounded response to the user based on the evidence above:`;
+Provide an authentic, factual, evidence-grounded response to the user based strictly on the verified evidence above:`;
 
-        contents.push({ role: 'user', parts: [{ text: currentPrompt }] });
+    rawTurns.push({ role: 'user', text: currentPrompt });
 
-        // Multi-model retry cascade
-        let geminiResponse: any = null;
-        let lastError: any = null;
-
-        for (const targetModel of modelsToTry) {
-          for (let attempt = 1; attempt <= 2; attempt++) {
-            try {
-              geminiResponse = await ai.models.generateContent({
-                model: targetModel,
-                contents,
-                config: {
-                  systemInstruction,
-                  temperature: 0.2
-                }
-              });
-              if (geminiResponse && geminiResponse.text) {
-                generatedText = geminiResponse.text;
-                break;
-              }
-            } catch (err: any) {
-              lastError = err;
-              console.warn(`[Gemini API] Attempt ${attempt} failed on model ${targetModel}:`, err?.status || err?.message || err);
-              const isTransient = err?.status === 503 || err?.message?.includes('503') || err?.message?.includes('high demand') || err?.code === 'ECONNRESET';
-              if (isTransient && attempt === 1) {
-                await new Promise(res => setTimeout(res, 500));
-              } else {
-                break; // Try next model in candidates list
-              }
-            }
-          }
-          if (generatedText) break;
+    // Clean up turns: remove leading model turns and merge consecutive turns with same role
+    const contents: any[] = [];
+    for (const turn of rawTurns) {
+      if (contents.length === 0) {
+        if (turn.role === 'user') {
+          contents.push({ role: 'user', parts: [{ text: turn.text }] });
         }
-
-        // If all Gemini online attempts fail, perform flawless fallback to Deterministic Grounded Generator
-        if (!generatedText) {
-          console.warn('[Gemini API] All online Gemini attempts failed or rate-limited. Falling back to TruthCart Verified Grounded Engine.', lastError?.message);
-          generatedText = generateDeterministicGroundedAnswer(userQuery, parsed, matchedProducts, policyChunks, updatedConstraints);
+      } else {
+        const last = contents[contents.length - 1];
+        if (last.role === turn.role) {
+          last.parts[0].text += `\n\n${turn.text}`;
+        } else {
+          contents.push({ role: turn.role, parts: [{ text: turn.text }] });
         }
-      } catch (err: any) {
-        console.warn('[Gemini API] Error during SDK initialization or invocation. Falling back to TruthCart Verified Grounded Engine.', err?.message);
-        generatedText = generateDeterministicGroundedAnswer(userQuery, parsed, matchedProducts, policyChunks, updatedConstraints);
       }
+    }
+
+    if (contents.length === 0) {
+      contents.push({ role: 'user', parts: [{ text: currentPrompt }] });
+    }
+
+    // Multi-model retry cascade with timeouts
+    let geminiResponse: any = null;
+    let lastError: any = null;
+
+    for (const targetModel of modelsToTry) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const timeoutPromise = new Promise((_, reject) => {
+            const timer = setTimeout(() => {
+              const timeoutErr: any = new Error(`Request to model ${targetModel} timed out after 18s`);
+              timeoutErr.status = 504;
+              timeoutErr.code = 'TIMEOUT';
+              reject(timeoutErr);
+            }, 18000);
+            if (typeof timer.unref === 'function') timer.unref();
+          });
+
+          geminiResponse = await Promise.race([
+            ai.models.generateContent({
+              model: targetModel,
+              contents,
+              config: {
+                systemInstruction,
+                temperature: 0.2
+              }
+            }),
+            timeoutPromise
+          ]);
+
+          if (geminiResponse && geminiResponse.text) {
+            generatedText = geminiResponse.text;
+            break;
+          }
+        } catch (err: any) {
+          lastError = err;
+          console.warn(`[Gemini API] Attempt ${attempt} failed on model ${targetModel}:`, err?.status || err?.message || err);
+          const isTransient = err?.status === 503 || err?.status === 504 || err?.status === 429 || err?.message?.includes('503') || err?.message?.includes('high demand') || err?.code === 'ECONNRESET' || err?.code === 'TIMEOUT';
+          if (isTransient && attempt === 1) {
+            await new Promise(res => setTimeout(res, 500));
+          } else {
+            break; // Try next model in candidates list
+          }
+        }
+      }
+      if (generatedText) break;
+    }
+
+    // Do NOT silently return a fake template answer when Gemini mode fails!
+    if (!generatedText) {
+      const status = typeof lastError?.status === 'number' ? lastError.status : (lastError?.message?.includes('429') ? 429 : 503);
+      const err: any = new Error(lastError?.message || 'Gemini API is temporarily unavailable or experiencing high demand. Please click Retry, or toggle to "Offline Grounded" in the header.');
+      err.status = status;
+      err.code = 'GEMINI_API_ERROR';
+      err.originalError = lastError?.message;
+      throw err;
     }
   } else {
     // Deterministic Evidence-Backed Generator (Offline Adapter)

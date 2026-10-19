@@ -107,13 +107,65 @@ async function startServer() {
 
       res.json(response);
     } catch (err: any) {
-      console.error('Error in /api/chat:', err);
-      const status = typeof err?.status === 'number' && err.status >= 400 && err.status < 600 ? err.status : 500;
+      console.error('[TrustShield API] Error in /api/chat:', err);
+
+      // Classify error type and determine appropriate client-safe status and code
+      let status = 500;
+      let code = 'INTERNAL_ERROR';
+      let category = 'SERVER_ERROR';
+      let userFriendlyMessage = 'Internal shopping assistant processing error';
+      let retryable = false;
+
+      const rawMsg = String(err?.message || '');
+      const rawStatus = err?.status;
+
+      if (err?.code === 'GEMINI_API_KEY_MISSING' || rawMsg.includes('GEMINI_API_KEY is not configured')) {
+        status = 401;
+        code = 'MISSING_API_KEY';
+        category = 'CONFIGURATION_ERROR';
+        userFriendlyMessage = 'Gemini API key is not configured on the server. Please add your GEMINI_API_KEY in the environment or Secrets panel.';
+      } else if (rawStatus === 404 || rawMsg.includes('not found') || rawMsg.includes('models/')) {
+        // Upstream model not found is a 502 Bad Gateway to the client, NOT an endpoint 404!
+        status = 502;
+        code = 'GEMINI_MODEL_NOT_FOUND';
+        category = 'MODEL_ERROR';
+        userFriendlyMessage = `Configured Gemini model was not found or is unavailable for this API key. Please check GEMINI_MODEL in your server configuration.`;
+        retryable = true;
+      } else if (rawStatus === 429 || rawMsg.includes('429') || rawMsg.includes('RESOURCE_EXHAUSTED') || rawMsg.includes('Quota exceeded')) {
+        status = 429;
+        code = 'GEMINI_QUOTA_EXCEEDED';
+        category = 'RATE_LIMIT';
+        userFriendlyMessage = 'Google Gemini free tier request quota exceeded. Please toggle to "Offline Grounded" mode in the header or retry later.';
+        retryable = true;
+      } else if (rawStatus === 401 || rawStatus === 403 || rawMsg.includes('API_KEY_INVALID') || rawMsg.includes('API key not valid')) {
+        status = 401;
+        code = 'GEMINI_AUTH_FAILED';
+        category = 'AUTHENTICATION_ERROR';
+        userFriendlyMessage = 'Gemini API authentication failed. The supplied GEMINI_API_KEY is invalid or unauthorized.';
+      } else if (err?.code === 'TIMEOUT' || rawStatus === 504 || rawMsg.includes('timed out')) {
+        status = 504;
+        code = 'GEMINI_TIMEOUT';
+        category = 'TIMEOUT';
+        userFriendlyMessage = 'Request to Gemini AI timed out after multiple retry attempts. Please click Retry.';
+        retryable = true;
+      } else if (rawStatus === 503 || rawMsg.includes('503') || rawMsg.includes('high demand') || err?.code === 'ECONNRESET') {
+        status = 503;
+        code = 'GEMINI_UNAVAILABLE';
+        category = 'SERVICE_OVERLOAD';
+        userFriendlyMessage = 'Google Gemini service is temporarily unavailable or experiencing high demand. Please retry shortly.';
+        retryable = true;
+      } else {
+        userFriendlyMessage = rawMsg || userFriendlyMessage;
+      }
+
       res.status(status).json({
         error: true,
-        message: err?.message || 'Internal shopping assistant processing error',
+        code,
+        category,
+        message: userFriendlyMessage,
         details: err?.originalError || err?.message,
-        retryable: status === 503 || status === 429 || status === 500 || err?.code === 'ECONNRESET'
+        upstreamStatus: rawStatus,
+        retryable
       });
     }
   });

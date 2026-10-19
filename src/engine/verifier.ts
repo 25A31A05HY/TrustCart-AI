@@ -80,15 +80,38 @@ export function verifyClaims(
 
     // 1. Check for Product Specific Claims (Price, Stock, Specs)
     let productEvaluated: Product | undefined = undefined;
-    for (const prod of allCatalogueProducts) {
-      if (propLower.includes(prod.title.toLowerCase()) || propLower.includes(prod.brand.toLowerCase())) {
+
+    // Pass 1: Exact or substring match on product title (longest title first to match specific editions)
+    const sortedByTitleLen = [...allCatalogueProducts].sort((a, b) => b.title.length - a.title.length);
+    for (const prod of sortedByTitleLen) {
+      if (propLower.includes(prod.title.toLowerCase())) {
         productEvaluated = prod;
         break;
       }
     }
 
-    if (!productEvaluated && referencedProducts.length > 0) {
-      productEvaluated = referencedProducts[0];
+    // Pass 2: Brand + specific model identifier (e.g. "iphone 16", "airpods pro", "wh-1000xm5", "q45", "pegasus 40", "zephyrus", "nitro 3")
+    if (!productEvaluated) {
+      for (const prod of allCatalogueProducts) {
+        const brand = prod.brand.toLowerCase();
+        if (propLower.includes(brand)) {
+          const modelKeywords = prod.title.toLowerCase()
+            .replace(brand, '')
+            .split(/[\s,\-\(\)]+/)
+            .filter(w => w.length >= 3 && !['with', 'case', 'mens', 'road', 'shoes', 'true', 'wireless', 'laptop', 'pro'].includes(w));
+          if (modelKeywords.some(k => propLower.includes(k))) {
+            productEvaluated = prod;
+            break;
+          }
+        }
+      }
+    }
+
+    // Pass 3: If only one referenced product exists in retrieval and pronoun is used ("it costs", "this item")
+    if (!productEvaluated && referencedProducts.length === 1) {
+      if (/\b(?:it|this|the item|the product|this headphone|this laptop|this phone|this shoe)\b/i.test(prop)) {
+        productEvaluated = referencedProducts[0];
+      }
     }
 
     // A. Price Verification
@@ -109,6 +132,14 @@ export function verifyClaims(
       const rawPriceStr = (priceAssertMatch ? priceAssertMatch[1] : anyPriceMatch![1]).replace(/,/g, '');
       const statedPrice = parseFloat(rawPriceStr);
       const actualPrice = productEvaluated.price;
+
+      // Currency check: ensure currency symbol matches
+      const isPropINR = prop.includes('₹') || propLower.includes('inr');
+      const isProductINR = productEvaluated.currency === 'INR';
+      if (isPropINR !== isProductINR && (isPropINR || prop.includes('$') || propLower.includes('usd'))) {
+        // Different currency context entirely (e.g. ₹ vs $), skip price comparison on this product
+        continue;
+      }
 
       const currSym = productEvaluated.currency === 'INR' ? '₹' : '$';
 

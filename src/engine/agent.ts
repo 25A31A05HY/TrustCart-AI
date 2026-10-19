@@ -408,10 +408,16 @@ export async function processUserMessage(
       httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
     });
 
-    const validGeminiTextModels = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-4-argon'];
+    const validGeminiTextModels = ['gemini-3.1-flash-lite', 'gemini-3.1-flash-lite-preview', 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-4-argon'];
     const envModel = process.env.GEMINI_MODEL;
-    const primaryModel = (envModel && validGeminiTextModels.includes(envModel)) ? envModel : 'gemini-3.8-flash';
-    const modelsToTry = Array.from(new Set([primaryModel, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite']));
+    const primaryModel = (envModel && validGeminiTextModels.includes(envModel)) ? envModel : 'gemini-3.1-flash-lite';
+    const modelsToTry = Array.from(new Set([
+      primaryModel,
+      'gemini-3.1-flash-lite',
+      'gemini-3.1-flash-lite-preview',
+      'gemini-3.8-flash',
+      'gemini-flash-latest'
+    ]));
 
     const systemInstruction = `You are TrustShield AI (developed from TrustCart AI), an authentic, evidence-grounded retail shopping assistant.
 CRITICAL GROUNDING RULES:
@@ -514,7 +520,11 @@ Provide an authentic, factual, evidence-grounded response to the user based stri
         } catch (err: any) {
           lastError = err;
           console.warn(`[Gemini API] Attempt ${attempt} failed on model ${targetModel}:`, err?.status || err?.message || err);
-          const isTransient = err?.status === 503 || err?.status === 504 || err?.status === 429 || err?.message?.includes('503') || err?.message?.includes('high demand') || err?.code === 'ECONNRESET' || err?.code === 'TIMEOUT';
+          const isQuotaExhausted = err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('RESOURCE_EXHAUSTED') || err?.message?.includes('Quota exceeded');
+          if (isQuotaExhausted) {
+            break; // Immediately cascade to next model with available quota
+          }
+          const isTransient = err?.status === 503 || err?.status === 504 || err?.message?.includes('503') || err?.message?.includes('high demand') || err?.code === 'ECONNRESET' || err?.code === 'TIMEOUT';
           if (isTransient && attempt === 1) {
             await new Promise(res => setTimeout(res, 500));
           } else {

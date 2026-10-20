@@ -493,11 +493,11 @@ Provide an authentic, factual, evidence-grounded response to the user based stri
         try {
           const timeoutPromise = new Promise((_, reject) => {
             const timer = setTimeout(() => {
-              const timeoutErr: any = new Error(`Request to model ${targetModel} timed out after 18s`);
+              const timeoutErr: any = new Error(`Request to model ${targetModel} timed out after 7s`);
               timeoutErr.status = 504;
               timeoutErr.code = 'TIMEOUT';
               reject(timeoutErr);
-            }, 18000);
+            }, 7000);
             if (typeof timer.unref === 'function') timer.unref();
           });
 
@@ -520,15 +520,20 @@ Provide an authentic, factual, evidence-grounded response to the user based stri
         } catch (err: any) {
           lastError = err;
           console.warn(`[Gemini API] Attempt ${attempt} failed on model ${targetModel}:`, err?.status || err?.message || err);
-          const isQuotaExhausted = err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('RESOURCE_EXHAUSTED') || err?.message?.includes('Quota exceeded');
-          if (isQuotaExhausted) {
-            break; // Immediately cascade to next model with available quota
-          }
-          const isTransient = err?.status === 503 || err?.status === 504 || err?.message?.includes('503') || err?.message?.includes('high demand') || err?.code === 'ECONNRESET' || err?.code === 'TIMEOUT';
-          if (isTransient && attempt === 1) {
-            await new Promise(res => setTimeout(res, 500));
-          } else {
-            break; // Try next model in candidates list
+          const isQuotaOrTransient =
+            err?.status === 429 ||
+            err?.status === 503 ||
+            err?.status === 504 ||
+            err?.code === 'TIMEOUT' ||
+            err?.code === 'ECONNRESET' ||
+            err?.message?.includes('429') ||
+            err?.message?.includes('503') ||
+            err?.message?.includes('RESOURCE_EXHAUSTED') ||
+            err?.message?.includes('Quota exceeded') ||
+            err?.message?.includes('high demand');
+
+          if (isQuotaOrTransient) {
+            break; // Immediately cascade to next candidate model
           }
         }
       }

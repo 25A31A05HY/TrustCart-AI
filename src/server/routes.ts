@@ -17,32 +17,21 @@ const evaluationRuns: BenchmarkSuiteSummary[] = [];
 // Simple in-memory rate limiting map (IP -> timestamps)
 const rateLimitMap = new Map<string, number[]>();
 
-export function registerRoutes(app: express.Express) {
-  app.use(express.json({ limit: '20mb' }));
-
-  // Request logger for diagnostic tracing
-  app.use((req, res, next) => {
-    if (req.path.startsWith('/api')) {
-      const start = Date.now();
-      res.on('finish', () => {
-        const ms = Date.now() - start;
-        console.log(`[API] ${req.method} ${req.path} -> ${res.statusCode} (${ms}ms)`);
-      });
-    }
-    next();
-  });
+export function createApiRouter(): express.Router {
+  const router = express.Router();
 
   // 1. Health & Readiness
-  app.get('/api/health', (req: Request, res: Response) => {
+  router.get('/health', (req: Request, res: Response) => {
     res.json({
       status: 'healthy',
+      message: 'TruthCart AI backend is running and healthy',
       service: 'TruthCart AI Backend',
       version: '1.0.0',
       timestamp: new Date().toISOString()
     });
   });
 
-  app.get('/api/readiness', (req: Request, res: Response) => {
+  router.get('/readiness', (req: Request, res: Response) => {
     const status = indexStore.getStatus();
     const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY');
     const configuredModel = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
@@ -57,7 +46,7 @@ export function registerRoutes(app: express.Express) {
   });
 
   // 2. Chat & Multi-turn Conversational Shopping
-  app.post('/api/chat', async (req: Request, res: Response) => {
+  router.post('/chat', async (req: Request, res: Response) => {
     try {
       const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'client';
       const now = Date.now();
@@ -99,7 +88,7 @@ export function registerRoutes(app: express.Express) {
 
       res.json(response);
     } catch (err: any) {
-      console.error('[TrustShield API] Error in /api/chat:', err);
+      console.error('[TrustShield API] Error in /chat:', err);
 
       let status = 500;
       let code = 'INTERNAL_ERROR';
@@ -119,7 +108,7 @@ export function registerRoutes(app: express.Express) {
         status = 502;
         code = 'GEMINI_MODEL_NOT_FOUND';
         category = 'MODEL_ERROR';
-        userFriendlyMessage = `Configured Gemini model was not found or is unavailable for this API key. Please check GEMINI_MODEL in your server configuration.`;
+        userFriendlyMessage = 'Configured Gemini model was not found or is unavailable for this API key. Please check GEMINI_MODEL in your server configuration.';
         retryable = true;
       } else if (rawStatus === 429 || rawMsg.includes('429') || rawMsg.includes('RESOURCE_EXHAUSTED') || rawMsg.includes('Quota exceeded')) {
         status = 429;
@@ -161,7 +150,7 @@ export function registerRoutes(app: express.Express) {
   });
 
   // 3. Products Discovery & Filtering
-  app.get('/api/products', (req: Request, res: Response) => {
+  router.get('/products', (req: Request, res: Response) => {
     let prods = indexStore.getAllProducts();
     const { category, brand, maxPrice, minPrice, inStock, minRating, q } = req.query;
 
@@ -202,7 +191,7 @@ export function registerRoutes(app: express.Express) {
     });
   });
 
-  app.get('/api/products/:productId', (req: Request, res: Response) => {
+  router.get('/products/:productId', (req: Request, res: Response) => {
     const prod = indexStore.getProductById(req.params.productId);
     if (!prod) {
       res.status(404).json({ error: `Product ID '${req.params.productId}' not found in catalogue.` });
@@ -212,11 +201,11 @@ export function registerRoutes(app: express.Express) {
   });
 
   // 4. Policy Retrieval
-  app.get('/api/policies', (req: Request, res: Response) => {
+  router.get('/policies', (req: Request, res: Response) => {
     res.json(indexStore.getAllPolicies());
   });
 
-  app.get('/api/policies/search', (req: Request, res: Response) => {
+  router.get('/policies/search', (req: Request, res: Response) => {
     const { q } = req.query;
     if (!q) {
       res.json(indexStore.getAllPolicies());
@@ -238,7 +227,7 @@ export function registerRoutes(app: express.Express) {
   });
 
   // 5. Diagnostics: Direct Retrieval and Direct Claim Verification
-  app.post('/api/retrieve', (req: Request, res: Response) => {
+  router.post('/retrieve', (req: Request, res: Response) => {
     const { query, constraints, topK = 5 } = req.body;
     if (!query) {
       res.status(400).json({ error: 'Query parameter is required' });
@@ -248,7 +237,7 @@ export function registerRoutes(app: express.Express) {
     res.json(results);
   });
 
-  app.post('/api/verify', (req: Request, res: Response) => {
+  router.post('/verify', (req: Request, res: Response) => {
     const { text, productId } = req.body;
     if (!text) {
       res.status(400).json({ error: 'Text parameter is required' });
@@ -261,7 +250,7 @@ export function registerRoutes(app: express.Express) {
   });
 
   // 6. Administration: Ingestion
-  app.post('/api/admin/import/catalogue', (req: Request, res: Response) => {
+  router.post('/admin/import/catalogue', (req: Request, res: Response) => {
     const { products, mode = 'append' } = req.body;
     if (!Array.isArray(products)) {
       res.status(400).json({ error: 'Payload must contain a "products" array' });
@@ -275,7 +264,7 @@ export function registerRoutes(app: express.Express) {
     });
   });
 
-  app.post('/api/admin/import/policies', (req: Request, res: Response) => {
+  router.post('/admin/import/policies', (req: Request, res: Response) => {
     const { policies, mode = 'append' } = req.body;
     if (!Array.isArray(policies)) {
       res.status(400).json({ error: 'Payload must contain a "policies" array' });
@@ -289,11 +278,11 @@ export function registerRoutes(app: express.Express) {
     });
   });
 
-  app.get('/api/admin/history', (req: Request, res: Response) => {
+  router.get('/admin/history', (req: Request, res: Response) => {
     res.json(indexStore.getIngestionHistory());
   });
 
-  app.post('/api/admin/reset', (req: Request, res: Response) => {
+  router.post('/admin/reset', (req: Request, res: Response) => {
     indexStore.initializeDefaultData();
     res.json({
       message: 'Catalogue and policies reset to canonical baseline',
@@ -302,7 +291,7 @@ export function registerRoutes(app: express.Express) {
   });
 
   // 7. Evaluation & Adversarial Benchmark
-  app.post('/api/evaluation/run', async (req: Request, res: Response) => {
+  router.post('/evaluation/run', async (req: Request, res: Response) => {
     try {
       const { engineMode = 'deterministic_offline' } = req.body;
       const summary = await runAdversarialBenchmark(engineMode as EngineMode);
@@ -314,7 +303,7 @@ export function registerRoutes(app: express.Express) {
     }
   });
 
-  app.get('/api/evaluation/runs', (req: Request, res: Response) => {
+  router.get('/evaluation/runs', (req: Request, res: Response) => {
     res.json({
       totalRuns: evaluationRuns.length,
       latestRun: evaluationRuns[0] || null,
@@ -322,7 +311,7 @@ export function registerRoutes(app: express.Express) {
     });
   });
 
-  app.get('/api/evaluation/runs/:runId', (req: Request, res: Response) => {
+  router.get('/evaluation/runs/:runId', (req: Request, res: Response) => {
     const idParam = req.params.runId;
     const idx = parseInt(idParam, 10);
     
@@ -339,4 +328,29 @@ export function registerRoutes(app: express.Express) {
 
     res.status(404).json({ error: `Evaluation run '${idParam}' not found.` });
   });
+
+  return router;
+}
+
+export function registerRoutes(app: express.Express) {
+  app.use(express.json({ limit: '20mb' }));
+
+  // Request logger for diagnostic tracing
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api') || req.path === '/health' || req.path === '/readiness') {
+      const start = Date.now();
+      res.on('finish', () => {
+        const ms = Date.now() - start;
+        console.log(`[API] ${req.method} ${req.path} -> ${res.statusCode} (${ms}ms)`);
+      });
+    }
+    next();
+  });
+
+  const apiRouter = createApiRouter();
+
+  // Mount router on BOTH '/api' and '/' to ensure full compatibility with
+  // both local Express server and Vercel serverless functions (with or without prefix stripping)
+  app.use('/api', apiRouter);
+  app.use('/', apiRouter);
 }

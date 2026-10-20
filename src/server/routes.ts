@@ -34,7 +34,7 @@ export function createApiRouter(): express.Router {
   router.get('/readiness', (req: Request, res: Response) => {
     const status = indexStore.getStatus();
     const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY');
-    const configuredModel = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+    const configuredModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
     res.json({
       ready: status.initialized && status.productCount > 0,
       indexStatus: status,

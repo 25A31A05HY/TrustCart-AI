@@ -408,15 +408,27 @@ export async function processUserMessage(
       httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
     });
 
-    const validGeminiTextModels = ['gemini-3.1-flash-lite', 'gemini-3.1-flash-lite-preview', 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-4-argon'];
+    const validGeminiTextModels = [
+      'gemini-3.5-flash-lite',
+      'gemini-3.5-flash',
+      'gemini-flash-lite-latest',
+      'gemini-3-flash-preview',
+      'gemini-3.8-flash',
+      'gemini-flash-latest',
+      'gemini-3.1-flash-lite',
+      'gemini-4-argon'
+    ];
     const envModel = process.env.GEMINI_MODEL;
-    const primaryModel = (envModel && validGeminiTextModels.includes(envModel)) ? envModel : 'gemini-3.1-flash-lite';
+    const primaryModel = (envModel && validGeminiTextModels.includes(envModel)) ? envModel : 'gemini-3.5-flash-lite';
     const modelsToTry = Array.from(new Set([
       primaryModel,
-      'gemini-3.1-flash-lite',
-      'gemini-3.1-flash-lite-preview',
+      'gemini-3.5-flash-lite',
+      'gemini-3.5-flash',
+      'gemini-flash-lite-latest',
+      'gemini-3-flash-preview',
       'gemini-3.8-flash',
-      'gemini-flash-latest'
+      'gemini-flash-latest',
+      'gemini-3.1-flash-lite'
     ]));
 
     const systemInstruction = `You are TrustShield AI (developed from TrustCart AI), an authentic, evidence-grounded retail shopping assistant.

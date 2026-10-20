@@ -3122,15 +3122,27 @@ async function processUserMessage(userQuery, history, activeConstraints, engineM
       apiKey: process.env.GEMINI_API_KEY,
       httpOptions: { headers: { "User-Agent": "aistudio-build" } }
     });
-    const validGeminiTextModels = ["gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview", "gemini-3.8-flash", "gemini-flash-latest", "gemini-4-argon"];
+    const validGeminiTextModels = [
+      "gemini-3.5-flash-lite",
+      "gemini-3.5-flash",
+      "gemini-flash-lite-latest",
+      "gemini-3-flash-preview",
+      "gemini-3.8-flash",
+      "gemini-flash-latest",
+      "gemini-3.1-flash-lite",
+      "gemini-4-argon"
+    ];
     const envModel = process.env.GEMINI_MODEL;
-    const primaryModel = envModel && validGeminiTextModels.includes(envModel) ? envModel : "gemini-3.1-flash-lite";
+    const primaryModel = envModel && validGeminiTextModels.includes(envModel) ? envModel : "gemini-3.5-flash-lite";
     const modelsToTry = Array.from(/* @__PURE__ */ new Set([
       primaryModel,
-      "gemini-3.1-flash-lite",
-      "gemini-3.1-flash-lite-preview",
+      "gemini-3.5-flash-lite",
+      "gemini-3.5-flash",
+      "gemini-flash-lite-latest",
+      "gemini-3-flash-preview",
       "gemini-3.8-flash",
-      "gemini-flash-latest"
+      "gemini-flash-latest",
+      "gemini-3.1-flash-lite"
     ]));
     const systemInstruction = `You are TrustShield AI (developed from TrustCart AI), an authentic, evidence-grounded retail shopping assistant.
 CRITICAL GROUNDING RULES:
@@ -3558,7 +3570,7 @@ function createApiRouter() {
   router.get("/readiness", (req, res) => {
     const status = indexStore.getStatus();
     const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "MY_GEMINI_API_KEY");
-    const configuredModel = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
+    const configuredModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
     res.json({
       ready: status.initialized && status.productCount > 0,
       indexStatus: status,

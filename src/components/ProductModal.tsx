@@ -1,9 +1,10 @@
 /**
  * TrustCart AI — Detailed Product Specification Sheet & Verified Reviews Modal
  * Editorial retail design: High-resolution product showcase, verified specifications,
- * store policy guarantees, and verified customer purchase reviews.
+ * store policy guarantees, verified customer purchase reviews, and an interactive
+ * Return Policy & Restocking Fee Calculator.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import {
   X,
   Star,
@@ -13,22 +14,84 @@ import {
   CheckCircle2,
   XCircle,
   ShoppingCart,
-  UserCheck
+  UserCheck,
+  Calculator,
+  AlertTriangle,
+  Info
 } from 'lucide-react';
-import { Product } from '../types';
+import { Product, CurrencyCode, formatCurrencyPrice } from '../types';
 
 interface ProductModalProps {
   product: Product | null;
   onClose: () => void;
   onAddToCart: (product: Product) => void;
+  selectedCurrency?: CurrencyCode;
 }
 
 export const ProductModal: React.FC<ProductModalProps> = ({
   product,
   onClose,
-  onAddToCart
+  onAddToCart,
+  selectedCurrency = 'USD'
 }) => {
+  const [returnDays, setReturnDays] = useState<number>(7);
+  const [returnCondition, setReturnCondition] = useState<'sealed' | 'opened' | 'damaged'>('sealed');
+
   if (!product) return null;
+
+  const formattedPrice = formatCurrencyPrice(product.price, product.currency, selectedCurrency);
+  const formattedOriginalPrice = product.originalPrice > product.price
+    ? formatCurrencyPrice(product.originalPrice, product.currency, selectedCurrency)
+    : null;
+
+  // Return & Restocking Fee Calculation Logic based on verified store policies
+  const isEarbud = product.category === 'Audio' && (
+    product.title.toLowerCase().includes('earbud') ||
+    product.title.toLowerCase().includes('in-ear') ||
+    product.title.toLowerCase().includes('wf-1000xm5')
+  );
+
+  const isConsumerElectronics = [
+    'Laptops',
+    'Audio',
+    'Displays',
+    'Cameras',
+    'Smartphones',
+    'Home Appliances'
+  ].includes(product.category);
+
+  const isWithinWindow = returnDays <= product.returnWindowDays;
+
+  let returnStatus: 'ELIGIBLE_FULL' | 'ELIGIBLE_RESTOCKING' | 'NON_RETURNABLE' | 'EXPIRED' | 'REJECTED';
+  let restockingFeePercent = 0;
+  let policyCitation = 'POL-RET-01';
+  let explanation = '';
+
+  if (!isWithinWindow) {
+    returnStatus = 'EXPIRED';
+    explanation = `Return window expired: Purchase was ${returnDays} days ago, but official policy allows a maximum of ${product.returnWindowDays} days.`;
+  } else if (returnCondition === 'damaged') {
+    returnStatus = 'REJECTED';
+    explanation = 'Items with customer-induced physical damage, altered serials, or missing components are ineligible for refund.';
+  } else if (isEarbud && returnCondition === 'opened') {
+    returnStatus = 'NON_RETURNABLE';
+    policyCitation = 'POL-RET-03';
+    explanation = 'Opened in-ear audio devices/earbuds cannot be returned for hygiene and health safety compliance under Policy POL-RET-03.';
+  } else if (returnCondition === 'opened' && isConsumerElectronics) {
+    returnStatus = 'ELIGIBLE_RESTOCKING';
+    restockingFeePercent = 0.10;
+    policyCitation = 'POL-RET-02';
+    explanation = 'Consumer electronics opened or unsealed incur a standard 10% restocking fee under Policy POL-RET-02. Items factory sealed are exempt.';
+  } else {
+    returnStatus = 'ELIGIBLE_FULL';
+    policyCitation = 'POL-RET-01';
+    explanation = returnCondition === 'sealed'
+      ? 'Factory-sealed original packaging qualifies for 100% full refund with zero restocking fees under Policy POL-RET-01.'
+      : 'General merchandise in good condition qualifies for 100% full refund within the 30-day window under Policy POL-RET-01.';
+  }
+
+  const restockingFeeAmount = formattedPrice.convertedAmount * restockingFeePercent;
+  const netRefundAmount = formattedPrice.convertedAmount - restockingFeeAmount;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
@@ -71,12 +134,17 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               <div>
                 <div className="flex items-baseline space-x-2">
                   <span className="text-2xl font-bold text-[#1A1A18] font-mono tabular-nums">
-                    ${product.price.toFixed(2)}
+                    {formattedPrice.formatted}
                   </span>
-                  <span className="text-xs text-[#7A7870]">{product.currency}</span>
-                  {product.originalPrice > product.price && (
+                  <span className="text-xs text-[#7A7870]">{selectedCurrency}</span>
+                  {selectedCurrency !== product.currency && (
+                    <span className="text-xs text-[#8A8880] font-mono">
+                      (Orig: {product.currency === 'INR' ? '₹' : '$'}{product.price.toFixed(2)})
+                    </span>
+                  )}
+                  {formattedOriginalPrice && (
                     <span className="text-xs text-[#9E9C94] line-through font-mono tabular-nums ml-1">
-                      ${product.originalPrice.toFixed(2)}
+                      {formattedOriginalPrice.formatted}
                     </span>
                   )}
                 </div>
@@ -110,7 +178,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 </div>
                 <div className="flex items-center space-x-2 text-[#4A4842]">
                   <RotateCcw className="w-4 h-4 text-[#2E4032] shrink-0" />
-                  <span>{product.returnWindowDays}-Day Return Eligibility (Subject to policy terms)</span>
+                  <span>{product.returnWindowDays}-Day Return Window (See calculator below)</span>
                 </div>
                 <div className="flex items-center space-x-2 text-[#4A4842]">
                   <Truck className="w-4 h-4 text-[#2E4032] shrink-0" />
@@ -133,6 +201,120 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 <ShoppingCart className="w-4 h-4" />
                 <span>{product.inStock && product.stockCount > 0 ? 'Add to Shopping Bag' : 'Out of Stock'}</span>
               </button>
+            </div>
+          </div>
+
+          {/* Feature: Interactive Return & Restocking Fee Calculator */}
+          <div className="p-4 rounded-xl bg-[#FAF9F6] border border-[#E6E4DC] space-y-3.5">
+            <div className="flex items-center justify-between pb-2 border-b border-[#ECEAE2]">
+              <div className="flex items-center space-x-2">
+                <Calculator className="w-4 h-4 text-[#2E4032]" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#1A1A18]">
+                  Return & Restocking Fee Eligibility Calculator
+                </h4>
+              </div>
+              <span className="text-[11px] font-mono text-[#7A7870]">
+                Window: {product.returnWindowDays} days
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              {/* Days since purchase slider */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[#5A5850]">
+                  <span>Days since delivery:</span>
+                  <strong className="font-mono text-[#1A1A18]">{returnDays} days</strong>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="45"
+                  value={returnDays}
+                  onChange={(e) => setReturnDays(Number(e.target.value))}
+                  className="w-full accent-[#2E4032] cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-[#8A8880]">
+                  <span>1 day</span>
+                  <span>{product.returnWindowDays}d deadline</span>
+                  <span>45 days</span>
+                </div>
+              </div>
+
+              {/* Package Condition Selection */}
+              <div className="space-y-1.5">
+                <span className="text-[#5A5850] block">Package condition:</span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { id: 'sealed', label: 'Factory Sealed' },
+                    { id: 'opened', label: 'Opened / Tested' },
+                    { id: 'damaged', label: 'Damaged' }
+                  ].map((cond) => (
+                    <button
+                      key={cond.id}
+                      type="button"
+                      onClick={() => setReturnCondition(cond.id as any)}
+                      className={`py-1.5 px-2 rounded-lg text-[11px] font-medium border text-center transition-all ${
+                        returnCondition === cond.id
+                          ? 'bg-[#2E4032] text-white border-[#2E4032] shadow-2xs font-semibold'
+                          : 'bg-white hover:bg-[#F2F0EB] text-[#5A5850] border-[#DDD9CF]'
+                      }`}
+                    >
+                      {cond.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Verdict Card */}
+            <div className={`p-3 rounded-lg border text-xs space-y-1.5 ${
+              returnStatus === 'ELIGIBLE_FULL'
+                ? 'bg-[#F0F5F1] border-[#CCE0D1] text-[#24422A]'
+                : returnStatus === 'ELIGIBLE_RESTOCKING'
+                ? 'bg-[#FDF8EE] border-[#ECDDBA] text-[#7A5B1F]'
+                : 'bg-[#FAF1EF] border-[#E8D5D0] text-[#8F3E2B]'
+            }`}>
+              <div className="flex items-center justify-between font-semibold">
+                <div className="flex items-center space-x-1.5">
+                  {returnStatus === 'ELIGIBLE_FULL' && <CheckCircle2 className="w-4 h-4 text-[#2E4032]" />}
+                  {returnStatus === 'ELIGIBLE_RESTOCKING' && <AlertTriangle className="w-4 h-4 text-[#B88B2A]" />}
+                  {(returnStatus === 'NON_RETURNABLE' || returnStatus === 'EXPIRED' || returnStatus === 'REJECTED') && (
+                    <XCircle className="w-4 h-4 text-[#8F3E2B]" />
+                  )}
+                  <span>
+                    {returnStatus === 'ELIGIBLE_FULL' && 'Eligible for 100% Full Refund'}
+                    {returnStatus === 'ELIGIBLE_RESTOCKING' && `Eligible with 10% Restocking Fee`}
+                    {returnStatus === 'NON_RETURNABLE' && 'Strictly Non-Returnable (Hygiene Policy)'}
+                    {returnStatus === 'EXPIRED' && 'Return Window Expired'}
+                    {returnStatus === 'REJECTED' && 'Ineligible for Return'}
+                  </span>
+                </div>
+                <span className="font-mono text-[11px] underline decoration-dotted">
+                  Policy {policyCitation}
+                </span>
+              </div>
+
+              <p className="text-[11px] opacity-90 leading-relaxed font-sans">
+                {explanation}
+              </p>
+
+              {returnStatus === 'ELIGIBLE_RESTOCKING' && (
+                <div className="pt-1.5 border-t border-black/10 flex items-center justify-between font-mono text-[11px]">
+                  <span>Restocking Fee Deduction (10%):</span>
+                  <span className="text-[#8F3E2B] font-bold">-{formattedPrice.symbol}{restockingFeeAmount.toFixed(2)}</span>
+                  <span>Estimated Net Refund:</span>
+                  <span className="text-[#2E4032] font-bold">{formattedPrice.symbol}{netRefundAmount.toFixed(2)}</span>
+                </div>
+              )}
+
+              {returnStatus === 'ELIGIBLE_FULL' && (
+                <div className="pt-1.5 border-t border-black/10 flex items-center justify-between font-mono text-[11px]">
+                  <span>Restocking Fee:</span>
+                  <span className="text-[#2E4032] font-bold">{formattedPrice.symbol}0.00</span>
+                  <span>Estimated Full Refund:</span>
+                  <span className="text-[#2E4032] font-bold">{formattedPrice.formatted}</span>
+                </div>
+              )}
             </div>
           </div>
 

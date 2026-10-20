@@ -225,3 +225,43 @@ export interface BenchmarkSuiteSummary {
   avgLatencyMs: number;
   results: BenchmarkResultItem[];
 }
+
+export type CurrencyCode = 'USD' | 'INR' | 'EUR' | 'GBP';
+
+export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
+  USD: '$',
+  INR: '₹',
+  EUR: '€',
+  GBP: '£'
+};
+
+export const EXCHANGE_RATES_FROM_USD: Record<CurrencyCode, number> = {
+  USD: 1.0,
+  INR: 86.5,
+  EUR: 0.92,
+  GBP: 0.78
+};
+
+export function formatCurrencyPrice(
+  amount: number,
+  fromCurrency: string = 'USD',
+  targetCurrency: CurrencyCode = 'USD'
+): { formatted: string; convertedAmount: number; symbol: string } {
+  // Normalize to USD first
+  let usd = amount;
+  const fromUpper = (fromCurrency || 'USD').toUpperCase();
+  if (fromUpper === 'INR') usd = amount / 86.5;
+  else if (fromUpper === 'EUR') usd = amount / 0.92;
+  else if (fromUpper === 'GBP') usd = amount / 0.78;
+
+  // Convert from USD to target currency
+  const rate = EXCHANGE_RATES_FROM_USD[targetCurrency] || 1.0;
+  const convertedAmount = Number((usd * rate).toFixed(2));
+  const symbol = CURRENCY_SYMBOLS[targetCurrency] || '$';
+
+  return {
+    formatted: `${symbol}${convertedAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    convertedAmount,
+    symbol
+  };
+}

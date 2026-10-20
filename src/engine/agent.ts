@@ -394,6 +394,7 @@ export async function processUserMessage(
 
   // 5. Model Generation (Real Gemini API vs Deterministic Offline Generator)
   let generatedText = '';
+  let usedEngineMode: EngineMode = engineMode;
 
   if (engineMode === 'gemini') {
     if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'MY_GEMINI_API_KEY') {
@@ -552,14 +553,12 @@ Provide an authentic, factual, evidence-grounded response to the user based stri
       if (generatedText) break;
     }
 
-    // Do NOT silently return a fake template answer when Gemini mode fails!
+    // If Gemini model cascade experienced timeouts or upstream errors, gracefully fall back to deterministic grounded engine!
     if (!generatedText) {
-      const status = typeof lastError?.status === 'number' ? lastError.status : (lastError?.message?.includes('429') ? 429 : 503);
-      const err: any = new Error(lastError?.message || 'Gemini API is temporarily unavailable or experiencing high demand. Please click Retry, or toggle to "Offline Grounded" in the header.');
-      err.status = status;
-      err.code = 'GEMINI_API_ERROR';
-      err.originalError = lastError?.message;
-      throw err;
+      console.warn('[Gemini API] Upstream models timed out (504) or failed. Gracefully falling back to deterministic grounded engine.');
+      generatedText = generateDeterministicGroundedAnswer(userQuery, parsed, matchedProducts, policyChunks, updatedConstraints);
+      usedEngineMode = 'deterministic_offline';
+      generatedText += '\n\n*(Note: Live Gemini connection timed out; response generated using our verified catalogue & policy engine).*';
     }
   } else {
     // Deterministic Evidence-Backed Generator (Offline Adapter)
@@ -587,7 +586,7 @@ Provide an authentic, factual, evidence-grounded response to the user based stri
     claims: verificationReport.claims,
     retrievedProducts: matchedProducts,
     appliedConstraints: updatedConstraints,
-    engineMode,
+    engineMode: usedEngineMode,
     retrievalLatencyMs: Number(retrievalLatency.toFixed(2)),
     verificationLatencyMs: Number(verifyLatency.toFixed(2)),
     totalLatencyMs: Number(totalLatency.toFixed(2))

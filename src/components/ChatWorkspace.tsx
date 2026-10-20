@@ -18,9 +18,10 @@ import {
   Radio,
   RefreshCw,
   Copy,
-  Check
+  Check,
+  Download
 } from 'lucide-react';
-import { ChatMessage, Product, Citation, UserConstraints } from '../types';
+import { ChatMessage, Product, Citation, UserConstraints, CurrencyCode } from '../types';
 import { ProductCard } from './ProductCard';
 
 interface ChatWorkspaceProps {
@@ -36,6 +37,7 @@ interface ChatWorkspaceProps {
   onSelectCitation: (citation: Citation) => void;
   activeConstraints: UserConstraints;
   onSwitchToOffline?: () => void;
+  selectedCurrency?: CurrencyCode;
 }
 
 export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
@@ -50,20 +52,121 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
   onToggleCompare,
   comparedProductIds,
   onSelectCitation,
-  activeConstraints
+  activeConstraints,
+  selectedCurrency = 'USD'
 }) => {
   const [inputText, setInputText] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
   const [speechSupported, setSpeechSupported] = useState(true);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [loadingElapsedMs, setLoadingElapsedMs] = useState<number>(0);
+  const [rateLimitCooldown, setRateLimitCooldown] = useState<number>(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+
+  // Live elapsed response time ticker
+  useEffect(() => {
+    let interval: any = null;
+    if (isLoading) {
+      setLoadingElapsedMs(0);
+      const start = Date.now();
+      interval = setInterval(() => {
+        setLoadingElapsedMs(Date.now() - start);
+      }, 50);
+    } else {
+      setLoadingElapsedMs(0);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isLoading]);
+
+  // Rate limit cooldown countdown ticker
+  useEffect(() => {
+    let timer: any = null;
+    if (rateLimitCooldown > 0) {
+      timer = setInterval(() => {
+        setRateLimitCooldown((prev) => Math.max(0, prev - 1));
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [rateLimitCooldown]);
+
+  // Detect rate limit / high-demand in latest message to trigger cooldown
+  useEffect(() => {
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg && lastMsg.isError && (
+      lastMsg.content.toLowerCase().includes('limit') ||
+      lastMsg.content.includes('429') ||
+      lastMsg.errorDetails?.includes('429') ||
+      lastMsg.content.toLowerCase().includes('demand')
+    )) {
+      setRateLimitCooldown(15);
+    }
+  }, [messages]);
 
   const handleCopyMessage = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedMessageId(id);
     setTimeout(() => setCopiedMessageId(null), 2000);
+  };
+
+  const handleExportAudit = () => {
+    if (messages.length === 0) return;
+    
+    let md = `# TrustShield AI — Grounded Shopping Audit Report\n\n`;
+    md += `**Audit Generated**: ${new Date().toLocaleString()}\n`;
+    md += `**Total Messages**: ${messages.length}\n`;
+    md += `**Active Constraints**: ${JSON.stringify(activeConstraints, null, 2)}\n\n`;
+    md += `----------------------------------------------------\n\n`;
+
+    messages.forEach((m, idx) => {
+      const role = m.role === 'user' ? 'Customer' : 'TrustShield Assistant';
+      md += `### ${idx + 1}. ${role} (${m.timestamp})\n\n`;
+      md += `${m.content}\n\n`;
+
+      if (m.role === 'assistant') {
+        if (m.engineMode) md += `* **Engine Mode**: \`${m.engineMode}\`\n`;
+        if (m.totalLatencyMs) md += `* **Latency**: ${m.totalLatencyMs}ms\n`;
+        if (m.refusalReason) md += `* **Policy Refusal**: ${m.refusalReason}\n`;
+
+        if (m.claims && m.claims.length > 0) {
+          md += `\n**Verified Factual Claims**:\n`;
+          m.claims.forEach(c => {
+            const icon = c.status === 'VERIFIED' ? '✅' : c.status === 'CONTRADICTED' ? '❌' : '⚠️';
+            md += `- ${icon} [${c.status}] "${c.text}" (Confidence: ${(c.confidence * 100).toFixed(0)}%)\n`;
+          });
+        }
+
+        if (m.citations && m.citations.length > 0) {
+          md += `\n**Cited Policy & Specification Documents**:\n`;
+          m.citations.forEach(cit => {
+            md += `- **[${cit.sourceId}]** *${cit.sourceTitle}*: "${cit.snippet}"\n`;
+          });
+        }
+
+        if (m.retrievedProducts && m.retrievedProducts.length > 0) {
+          md += `\n**Recommended Catalogue Products**:\n`;
+          m.retrievedProducts.forEach(p => {
+            md += `- **${p.title}** by ${p.brand} | ${p.currency} ${p.price} | Stock: ${p.stockCount} | Rating: ${p.rating}★\n`;
+          });
+        }
+      }
+      md += `\n---\n\n`;
+    });
+
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `trustshield-shopping-audit-${Date.now()}.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const scrollToBottom = () => {
@@ -208,14 +311,27 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
           <span className="text-[#686660]">Verified Grounding Active</span>
         </div>
 
-        <button
-          onClick={onResetChat}
-          className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-[#7A7870] hover:text-[#1A1A18] hover:bg-[#F0EFEA] transition-colors"
-          title="Reset conversation state"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Reset Session</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          {messages.length > 0 && (
+            <button
+              onClick={handleExportAudit}
+              className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-[#2E4032] hover:bg-[#EFECE5] bg-white border border-[#DDD9CF] transition-colors shadow-2xs"
+              title="Download verified audit trail report (Markdown)"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export Audit</span>
+            </button>
+          )}
+
+          <button
+            onClick={onResetChat}
+            className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-[#7A7870] hover:text-[#1A1A18] hover:bg-[#F0EFEA] transition-colors"
+            title="Reset conversation state"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reset Session</span>
+          </button>
+        </div>
       </div>
 
       {/* Messages Stream Area */}
@@ -294,17 +410,29 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                       </div>
                     )}
 
+                    {rateLimitCooldown > 0 && (
+                      <div className="p-2.5 rounded-lg bg-white/90 border border-[#E8D5D0] flex items-center justify-between text-xs text-[#8F3E2B] shadow-2xs">
+                        <div className="flex items-center space-x-1.5 font-medium">
+                          <Clock className="w-3.5 h-3.5 animate-spin" />
+                          <span>Rate limit attained. Please try again after <strong>{rateLimitCooldown} seconds</strong>.</span>
+                        </div>
+                        <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-[#FAF1EF] border border-[#E8D5D0]">
+                          {rateLimitCooldown}s
+                        </span>
+                      </div>
+                    )}
+
                     {msg.retryable && (
                       <div className="pt-2 flex flex-wrap items-center gap-2">
                         {onRetry && (
                           <button
                             type="button"
                             onClick={onRetry}
-                            disabled={isLoading}
+                            disabled={isLoading || rateLimitCooldown > 0}
                             className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#2E4032] hover:bg-[#233226] text-white transition-colors shadow-2xs active:scale-95 disabled:opacity-50"
                           >
                             <RefreshCw className="w-3.5 h-3.5" />
-                            <span>Retry with Gemini</span>
+                            <span>{rateLimitCooldown > 0 ? `Wait ${rateLimitCooldown}s` : 'Retry with Gemini'}</span>
                           </button>
                         )}
                         {onSwitchToOffline && (
@@ -415,6 +543,7 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
                         onToggleCompare={onToggleCompare}
                         isCompared={comparedProductIds.includes(prod.id)}
                         compact={true}
+                        selectedCurrency={selectedCurrency}
                       />
                     ))}
                   </div>
@@ -448,6 +577,9 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             <div className="p-3.5 rounded-2xl bg-white border border-[#E2E0D6] text-xs text-[#686660] flex items-center space-x-2.5 shadow-2xs">
               <Sparkles className="w-4 h-4 text-[#2E4032] animate-spin" />
               <span>Verifying catalogue records and validating factual claims...</span>
+              <span className="font-mono text-[11px] text-[#2E4032] font-semibold bg-[#EAE8E0] px-2 py-0.5 rounded-full ml-1">
+                {(loadingElapsedMs / 1000).toFixed(1)}s
+              </span>
             </div>
           </div>
         )}
@@ -550,22 +682,28 @@ export const ChatWorkspace: React.FC<ChatWorkspaceProps> = ({
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             placeholder={
-              isListening
+              rateLimitCooldown > 0
+                ? `Rate limit attained. Please try again after ${rateLimitCooldown}s...`
+                : isListening
                 ? 'Listening to speech... (say your question)'
                 : "Ask anything (e.g., 'Find laptops under $700' or 'Return policy on opened electronics')..."
             }
-            disabled={isLoading}
-            className="flex-1 bg-white border border-[#D5D3C9] focus:border-[#2E4032] rounded-xl px-4 py-3 text-xs sm:text-sm text-[#1A1A18] placeholder-[#94928A] focus:outline-none transition-colors shadow-2xs"
+            disabled={isLoading || rateLimitCooldown > 0}
+            className="flex-1 bg-white border border-[#D5D3C9] focus:border-[#2E4032] rounded-xl px-4 py-3 text-xs sm:text-sm text-[#1A1A18] placeholder-[#94928A] focus:outline-none transition-colors shadow-2xs disabled:bg-[#FAF9F6] disabled:text-[#A8A69E]"
           />
 
           <button
             type="submit"
-            disabled={isLoading || !inputText.trim()}
-            className="p-3 bg-[#2E4032] hover:bg-[#233226] disabled:bg-[#EAE8E0] disabled:text-[#A09E95] text-white font-medium rounded-xl transition-all shadow-xs active:scale-95 shrink-0"
+            disabled={isLoading || !inputText.trim() || rateLimitCooldown > 0}
+            className="p-3 bg-[#2E4032] hover:bg-[#233226] disabled:bg-[#EAE8E0] disabled:text-[#A09E95] text-white font-medium rounded-xl transition-all shadow-xs active:scale-95 shrink-0 flex items-center justify-center min-w-[44px]"
             aria-label="Send message"
-            title="Send message"
+            title={rateLimitCooldown > 0 ? `Wait ${rateLimitCooldown}s` : "Send message"}
           >
-            <Send className="w-4 h-4" />
+            {rateLimitCooldown > 0 ? (
+              <span className="font-mono text-xs font-bold text-[#8F3E2B]">{rateLimitCooldown}s</span>
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
           </button>
         </form>
       </div>

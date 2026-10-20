@@ -13,19 +13,22 @@ import { BenchmarkRunner } from './components/BenchmarkRunner';
 import { AdminIngestion } from './components/AdminIngestion';
 import { ProductModal } from './components/ProductModal';
 import { CartDrawer } from './components/CartDrawer';
+import { DuelArena } from './components/DuelArena';
 import {
   ChatMessage,
   Product,
   CartItem,
   Citation,
   EngineMode,
-  UserConstraints
+  UserConstraints,
+  CurrencyCode
 } from './types';
 import { indexStore } from './engine/indexStore';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'chat' | 'catalogue' | 'compare' | 'evidence' | 'benchmark' | 'admin'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'catalogue' | 'compare' | 'duel' | 'evidence' | 'benchmark' | 'admin'>('chat');
   const [engineMode, setEngineMode] = useState<EngineMode>('gemini');
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('USD');
   const [products, setProducts] = useState<Product[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -251,6 +254,8 @@ export default function App() {
           setActiveConstraints({ inStockOnly: false, requiredFeatures: [] });
           showToast('Active constraints cleared.');
         }}
+        selectedCurrency={selectedCurrency}
+        onSelectCurrency={setSelectedCurrency}
       />
 
       {/* Main Tab Views */}
@@ -275,6 +280,7 @@ export default function App() {
                   setActiveTab('evidence');
                 }}
                 activeConstraints={activeConstraints}
+                selectedCurrency={selectedCurrency}
               />
             </div>
 
@@ -295,6 +301,7 @@ export default function App() {
             onInspectProduct={(prod) => setInspectedProduct(prod)}
             onToggleCompare={handleToggleCompare}
             comparedProductIds={comparedProducts.map((p) => p.id)}
+            selectedCurrency={selectedCurrency}
           />
         )}
 
@@ -306,7 +313,12 @@ export default function App() {
             onAddCompare={(prod) => handleToggleCompare(prod)}
             onClearCompare={handleClearCompare}
             onAddToCart={handleAddToCart}
+            selectedCurrency={selectedCurrency}
           />
+        )}
+
+        {activeTab === 'duel' && (
+          <DuelArena products={products} selectedCurrency={selectedCurrency} />
         )}
 
         {activeTab === 'evidence' && (
@@ -332,6 +344,7 @@ export default function App() {
         product={inspectedProduct}
         onClose={() => setInspectedProduct(null)}
         onAddToCart={handleAddToCart}
+        selectedCurrency={selectedCurrency}
       />
 
       {/* Shopping Cart Drawer */}
@@ -342,6 +355,7 @@ export default function App() {
         onUpdateQuantity={handleUpdateCartQuantity}
         onRemoveItem={handleRemoveFromCart}
         onClearCart={handleClearCart}
+        selectedCurrency={selectedCurrency}
       />
 
       {/* Toast Notification */}

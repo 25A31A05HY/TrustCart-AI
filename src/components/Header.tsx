@@ -10,17 +10,19 @@ import {
   SlidersHorizontal,
   X
 } from 'lucide-react';
-import { EngineMode, UserConstraints } from '../types';
+import { EngineMode, UserConstraints, CurrencyCode } from '../types';
 
 interface HeaderProps {
-  activeTab: 'chat' | 'catalogue' | 'compare' | 'evidence' | 'benchmark' | 'admin';
-  setActiveTab: (tab: 'chat' | 'catalogue' | 'compare' | 'evidence' | 'benchmark' | 'admin') => void;
+  activeTab: 'chat' | 'catalogue' | 'compare' | 'duel' | 'evidence' | 'benchmark' | 'admin';
+  setActiveTab: (tab: 'chat' | 'catalogue' | 'compare' | 'duel' | 'evidence' | 'benchmark' | 'admin') => void;
   engineMode: EngineMode;
   setEngineMode: (mode: EngineMode) => void;
   cartCount: number;
   openCart: () => void;
   activeConstraints: UserConstraints;
   clearConstraints: () => void;
+  selectedCurrency: CurrencyCode;
+  onSelectCurrency: (currency: CurrencyCode) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -31,7 +33,9 @@ export const Header: React.FC<HeaderProps> = ({
   cartCount,
   openCart,
   activeConstraints,
-  clearConstraints
+  clearConstraints,
+  selectedCurrency,
+  onSelectCurrency
 }) => {
   const hasConstraints = Boolean(
     activeConstraints.maxBudget ||
@@ -59,12 +63,13 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
 
-          {/* Zone 2: 4-6 Clean Single-line Navigation Links */}
-          <nav className="hidden md:flex items-center space-x-1 lg:space-x-2">
+          {/* Zone 2: Clean Single-line Navigation Links */}
+          <nav className="hidden md:flex items-center space-x-1 lg:space-x-1.5">
             {[
               { id: 'chat', label: 'Assistant' },
               { id: 'catalogue', label: 'Catalogue' },
               { id: 'compare', label: 'Compare' },
+              { id: 'duel', label: '⚔️ AI Duel' },
               { id: 'evidence', label: 'Evidence & Truth' },
               { id: 'benchmark', label: 'Benchmark' },
               { id: 'admin', label: 'Ingestion' }
@@ -111,6 +116,21 @@ export const Header: React.FC<HeaderProps> = ({
                 <Sparkles className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Gemini AI</span>
               </button>
+            </div>
+
+            {/* Live Multi-Currency Switcher */}
+            <div className="relative">
+              <select
+                value={selectedCurrency}
+                onChange={(e) => onSelectCurrency(e.target.value as CurrencyCode)}
+                className="bg-[#EFECE4] hover:bg-[#EAE6DE] border border-[#E0DED5] rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#2E4032] focus:outline-none cursor-pointer transition-colors"
+                title="Select store display currency"
+              >
+                <option value="USD">USD ($)</option>
+                <option value="INR">INR (₹)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="GBP">GBP (£)</option>
+              </select>
             </div>
 
             {/* Shopping Bag Button */}

@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   Check
 } from 'lucide-react';
-import { Product } from '../types';
+import { Product, CurrencyCode, formatCurrencyPrice } from '../types';
 
 interface ProductCardProps {
   product: Product;
@@ -22,6 +22,7 @@ interface ProductCardProps {
   isCompared?: boolean;
   matchReason?: string;
   compact?: boolean;
+  selectedCurrency?: CurrencyCode;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
@@ -31,9 +32,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onToggleCompare,
   isCompared = false,
   matchReason,
-  compact = false
+  compact = false,
+  selectedCurrency = 'USD'
 }) => {
   const hasDiscount = product.originalPrice > product.price;
+  const priceDisplay = formatCurrencyPrice(product.price, product.currency, selectedCurrency);
+  const origPriceDisplay = hasDiscount ? formatCurrencyPrice(product.originalPrice, product.currency, selectedCurrency) : null;
 
   return (
     <article
@@ -122,12 +126,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             {/* Price with tabular numerals */}
             <div className="flex items-baseline space-x-1.5">
               <span className="text-lg font-bold text-[#1A1A18] font-mono tabular-nums">
-                ${product.price.toFixed(2)}
+                {priceDisplay.formatted}
               </span>
-              <span className="text-xs text-[#7A7870]">{product.currency}</span>
-              {hasDiscount && (
+              <span className="text-xs text-[#7A7870]">{selectedCurrency}</span>
+              {selectedCurrency !== product.currency && (
+                <span className="text-[10px] text-[#9E9C94] font-mono">
+                  ({product.currency === 'INR' ? '₹' : '$'}{product.price.toFixed(2)})
+                </span>
+              )}
+              {origPriceDisplay && (
                 <span className="text-xs text-[#9E9C94] line-through font-mono tabular-nums ml-1">
-                  ${product.originalPrice.toFixed(2)}
+                  {origPriceDisplay.formatted}
                 </span>
               )}
             </div>

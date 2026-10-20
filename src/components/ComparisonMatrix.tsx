@@ -3,17 +3,20 @@
  * Editorial retail design: Clean tabular side-by-side specification comparison
  * using canonical database records. Non-existent specs are explicitly rendered
  * as "Not available in catalogue".
+ * Includes interactive Difference Highlighting mode.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Scale,
   X,
   Star,
   CheckCircle2,
   XCircle,
-  ShoppingCart
+  ShoppingCart,
+  SlidersHorizontal,
+  Sparkles
 } from 'lucide-react';
-import { Product } from '../types';
+import { Product, CurrencyCode, formatCurrencyPrice } from '../types';
 
 interface ComparisonMatrixProps {
   products: Product[];
@@ -22,6 +25,7 @@ interface ComparisonMatrixProps {
   onAddCompare: (product: Product) => void;
   onClearCompare: () => void;
   onAddToCart: (product: Product) => void;
+  selectedCurrency?: CurrencyCode;
 }
 
 export const ComparisonMatrix: React.FC<ComparisonMatrixProps> = ({
@@ -30,8 +34,11 @@ export const ComparisonMatrix: React.FC<ComparisonMatrixProps> = ({
   onRemoveCompare,
   onAddCompare,
   onClearCompare,
-  onAddToCart
+  onAddToCart,
+  selectedCurrency = 'USD'
 }) => {
+  const [highlightDiffs, setHighlightDiffs] = useState<boolean>(true);
+
   // Collect union of all spec keys across compared products
   const allSpecKeys = Array.from(
     new Set(
@@ -41,7 +48,9 @@ export const ComparisonMatrix: React.FC<ComparisonMatrixProps> = ({
 
   // Find lowest price
   const lowestPrice = comparedProducts.length > 0
-    ? Math.min(...comparedProducts.map(p => p.price))
+    ? Math.min(...comparedProducts.map(p => {
+        return formatCurrencyPrice(p.price, p.currency, selectedCurrency).convertedAmount;
+      }))
     : 0;
 
   // Find highest rating
@@ -62,18 +71,35 @@ export const ComparisonMatrix: React.FC<ComparisonMatrixProps> = ({
             Verified Specification Matrix
           </h1>
           <p className="text-xs sm:text-sm text-[#686660] mt-1 max-w-xl">
-            Compare official catalogue specifications side-by-side. Missing or unverified attributes are explicitly rendered as &ldquo;Not available in catalogue&rdquo;.
+            Compare official catalogue specifications side-by-side. Differing specs are automatically highlighted to assist your purchase decision.
           </p>
         </div>
 
-        {comparedProducts.length > 0 && (
-          <button
-            onClick={onClearCompare}
-            className="text-xs text-[#8F3E2B] hover:text-[#6E2A1B] font-medium underline underline-offset-2 self-start sm:self-auto transition-colors"
-          >
-            Clear Comparison List ({comparedProducts.length})
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          {comparedProducts.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setHighlightDiffs(!highlightDiffs)}
+              className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                highlightDiffs
+                  ? 'bg-[#F2ECE1] border-[#C8BFA8] text-[#5A451A]'
+                  : 'bg-white border-[#DDD9CF] text-[#686660] hover:bg-[#F9F8F5]'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-[#5A451A]" />
+              <span>Highlight Differences: <strong className="font-bold">{highlightDiffs ? 'ON' : 'OFF'}</strong></span>
+            </button>
+          )}
+
+          {comparedProducts.length > 0 && (
+            <button
+              onClick={onClearCompare}
+              className="text-xs text-[#8F3E2B] hover:text-[#6E2A1B] font-medium underline underline-offset-2 transition-colors"
+            >
+              Clear Matrix ({comparedProducts.length})
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Select Products to Compare Bar */}
@@ -92,11 +118,14 @@ export const ComparisonMatrix: React.FC<ComparisonMatrixProps> = ({
             <option value="" disabled>Select an item from the verified catalogue...</option>
             {products
               .filter(p => !comparedProducts.some(cp => cp.id === p.id))
-              .map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.title} (${p.price.toFixed(2)})
-                </option>
-              ))}
+              .map(p => {
+                const pr = formatCurrencyPrice(p.price, p.currency, selectedCurrency);
+                return (
+                  <option key={p.id} value={p.id}>
+                    {p.title} ({pr.formatted})
+                  </option>
+                );
+              })}
           </select>
         </div>
       </div>
@@ -108,64 +137,87 @@ export const ComparisonMatrix: React.FC<ComparisonMatrixProps> = ({
           </div>
           <div className="space-y-1">
             <h3 className="font-serif text-lg font-bold text-[#1A1A18]">No products currently in comparison</h3>
-            <p className="text-xs text-[#7A7870] max-w-md mx-auto">
-              Select items from the dropdown above, browse the Catalogue tab, or click &ldquo;Compare&rdquo; on any product card in the assistant stream.
+            <p className="text-xs text-[#7A7870] max-w-sm mx-auto">
+              Select products from the Catalogue tab or click the Compare icon on any product card to see side-by-side spec verification.
             </p>
           </div>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-[#E6E4DC] bg-white shadow-xs">
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="w-full border-collapse text-left text-xs min-w-[700px]">
+            
+            {/* Table Header: Product Cards */}
             <thead>
               <tr className="bg-[#FAF9F6] border-b border-[#E6E4DC]">
-                <th className="p-4 w-52 text-[#7A7870] font-semibold uppercase tracking-wider text-[11px] sticky left-0 bg-[#FAF9F6] z-10 border-r border-[#E6E4DC]">
-                  Specification / Field
+                <th className="p-4 w-48 font-serif font-bold text-[#1A1A18] text-sm align-top sticky left-0 bg-[#FAF9F6] z-10 border-r border-[#E6E4DC]">
+                  <div className="space-y-1">
+                    <span>Attribute / Spec</span>
+                    {highlightDiffs && comparedProducts.length > 1 && (
+                      <div className="flex items-center space-x-1 text-[10px] text-[#8C6D23] font-sans font-normal pt-1">
+                        <Sparkles className="w-3 h-3" />
+                        <span>Diff highlighting active</span>
+                      </div>
+                    )}
+                  </div>
                 </th>
-                {comparedProducts.map((p) => (
-                  <th key={p.id} className="p-4 min-w-[260px] align-top border-l border-[#E6E4DC]">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-1">
-                        <span className="text-[10px] uppercase font-bold tracking-wider text-[#7A7870]">{p.brand}</span>
-                        <h4 className="font-serif font-bold text-[#1A1A18] text-sm line-clamp-2">{p.title}</h4>
+
+                {comparedProducts.map((p) => {
+                  const pr = formatCurrencyPrice(p.price, p.currency, selectedCurrency);
+                  const isLowest = pr.convertedAmount === lowestPrice && comparedProducts.length > 1;
+
+                  return (
+                    <th key={p.id} className="p-4 w-64 align-top border-l border-[#E6E4DC]">
+                      <div className="flex justify-end mb-2">
+                        <button
+                          onClick={() => onRemoveCompare(p.id)}
+                          className="p-1 rounded-md text-[#9A9890] hover:text-[#8F3E2B] hover:bg-[#EFECE5] transition-colors"
+                          title="Remove from comparison"
+                          aria-label={`Remove ${p.title} from comparison`}
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
+
+                      <div className="aspect-[4/3] w-full rounded-lg overflow-hidden bg-[#F4F3EE] mb-3 border border-[#EAE8E0]">
+                        <img
+                          src={p.imageUrl}
+                          alt={p.title}
+                          className="w-full h-full object-cover object-center"
+                        />
+                      </div>
+
+                      <span className="text-[10px] uppercase font-semibold tracking-wider text-[#7A7870]">{p.brand}</span>
+                      <h3 className="font-serif font-bold text-xs text-[#1A1A18] line-clamp-2 mt-0.5" title={p.title}>
+                        {p.title}
+                      </h3>
+
+                      <div className="mt-2 flex items-baseline space-x-1.5">
+                        <span className="text-base font-bold text-[#1A1A18] font-mono tabular-nums">
+                          {pr.formatted}
+                        </span>
+                        <span className="text-[10px] text-[#7A7870]">{selectedCurrency}</span>
+                        {isLowest && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#EDF4EE] text-[#2E4032] border border-[#CCE0D1]">
+                            Lowest Price
+                          </span>
+                        )}
+                      </div>
+
                       <button
-                        onClick={() => onRemoveCompare(p.id)}
-                        className="p-1 rounded-md hover:bg-[#EAE8E0] text-[#8A8880] hover:text-[#1A1A18] transition-colors"
-                        title="Remove product from comparison"
-                        aria-label="Remove product"
+                        onClick={() => onAddToCart(p)}
+                        disabled={!p.inStock || p.stockCount <= 0}
+                        className={`mt-3 w-full py-2 px-3 rounded-lg font-medium text-xs flex items-center justify-center space-x-1.5 transition-all ${
+                          p.inStock && p.stockCount > 0
+                            ? 'bg-[#2E4032] hover:bg-[#233226] text-white shadow-xs active:scale-[0.99]'
+                            : 'bg-[#F0EFEA] text-[#A09E95] cursor-not-allowed border border-[#DDD9CF]'
+                        }`}
                       >
-                        <X className="w-4 h-4" />
+                        <ShoppingCart className="w-3.5 h-3.5" />
+                        <span>{p.inStock && p.stockCount > 0 ? 'Add to Bag' : 'Out of Stock'}</span>
                       </button>
-                    </div>
-
-                    <div className="mt-3.5 flex items-baseline justify-between">
-                      <div className="flex items-baseline space-x-1">
-                        <span className="text-lg font-bold text-[#1A1A18] font-mono tabular-nums">
-                          ${p.price.toFixed(2)}
-                        </span>
-                        <span className="text-xs text-[#7A7870]">{p.currency}</span>
-                      </div>
-                      {p.price === lowestPrice && comparedProducts.length > 1 && (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-[#F0F4F1] text-[#2E4032] border border-[#D5E0D7]">
-                          Lowest Price
-                        </span>
-                      )}
-                    </div>
-
-                    <button
-                      onClick={() => onAddToCart(p)}
-                      disabled={!p.inStock || p.stockCount <= 0}
-                      className={`mt-3 w-full py-2 px-3 rounded-lg font-medium text-xs flex items-center justify-center space-x-1.5 transition-all ${
-                        p.inStock && p.stockCount > 0
-                          ? 'bg-[#2E4032] hover:bg-[#233226] text-white shadow-xs active:scale-[0.99]'
-                          : 'bg-[#F0EFEA] text-[#A09E95] cursor-not-allowed border border-[#DDD9CF]'
-                      }`}
-                    >
-                      <ShoppingCart className="w-3.5 h-3.5" />
-                      <span>{p.inStock && p.stockCount > 0 ? 'Add to Bag' : 'Out of Stock'}</span>
-                    </button>
-                  </th>
-                ))}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
 
@@ -196,96 +248,153 @@ export const ComparisonMatrix: React.FC<ComparisonMatrixProps> = ({
               </tr>
 
               {/* Stock Status */}
-              <tr>
-                <td className="p-4 font-semibold text-[#5A5850] sticky left-0 bg-[#FAF9F6] z-10 border-r border-[#E6E4DC]">
-                  Inventory Status
-                </td>
-                {comparedProducts.map((p) => (
-                  <td key={p.id} className="p-4 border-l border-[#E6E4DC]">
-                    {p.inStock && p.stockCount > 0 ? (
-                      <span className="inline-flex items-center space-x-1.5 text-[#2E4032] font-medium">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>In Stock ({p.stockCount} units available)</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center space-x-1.5 text-[#8F3E2B] font-medium">
-                        <XCircle className="w-3.5 h-3.5" />
-                        <span>Strictly Out of Stock</span>
-                      </span>
-                    )}
-                  </td>
-                ))}
-              </tr>
-
-              {/* Customer Rating */}
-              <tr>
-                <td className="p-4 font-semibold text-[#5A5850] sticky left-0 bg-[#FAF9F6] z-10 border-r border-[#E6E4DC]">
-                  Verified Customer Rating
-                </td>
-                {comparedProducts.map((p) => (
-                  <td key={p.id} className="p-4 border-l border-[#E6E4DC]">
-                    <div className="flex items-center space-x-1.5">
-                      <Star className="w-3.5 h-3.5 fill-[#C79E38] text-[#C79E38]" />
-                      <span className="font-semibold text-[#1A1A18] font-mono">{p.rating.toFixed(1)} / 5</span>
-                      <span className="text-[#8A8880]">({p.reviewCount} reviews)</span>
-                      {p.rating === highestRating && comparedProducts.length > 1 && (
-                        <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#FAF4E6] text-[#8A6820] border border-[#EBDCB8]">
-                          Top Rated
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                ))}
-              </tr>
-
-              {/* Manufacturer Warranty */}
-              <tr>
-                <td className="p-4 font-semibold text-[#5A5850] sticky left-0 bg-[#FAF9F6] z-10 border-r border-[#E6E4DC]">
-                  Manufacturer Warranty
-                </td>
-                {comparedProducts.map((p) => (
-                  <td key={p.id} className="p-4 border-l border-[#E6E4DC]">
-                    {p.warrantyMonths} Months Official Manufacturer Limited Warranty
-                  </td>
-                ))}
-              </tr>
-
-              {/* Return Window */}
-              <tr>
-                <td className="p-4 font-semibold text-[#5A5850] sticky left-0 bg-[#FAF9F6] z-10 border-r border-[#E6E4DC]">
-                  Store Return Window
-                </td>
-                {comparedProducts.map((p) => (
-                  <td key={p.id} className="p-4 border-l border-[#E6E4DC]">
-                    {p.returnWindowDays} Calendar Days (subject to return policy)
-                  </td>
-                ))}
-              </tr>
-
-              {/* All Unique Technical Specs */}
-              {allSpecKeys.map((specKey) => (
-                <tr key={specKey}>
-                  <td className="p-4 font-semibold text-[#5A5850] sticky left-0 bg-[#FAF9F6] z-10 border-r border-[#E6E4DC] capitalize">
-                    {specKey.replace(/([A-Z])/g, ' $1')}
-                  </td>
-                  {comparedProducts.map((p) => {
-                    const val = p.specs ? p.specs[specKey] : undefined;
-                    return (
+              {(() => {
+                const stockValues = comparedProducts.map(p => p.inStock && p.stockCount > 0);
+                const isDiff = new Set(stockValues).size > 1;
+                return (
+                  <tr className={highlightDiffs && isDiff ? 'bg-[#FCF9F2]' : ''}>
+                    <td className="p-4 font-semibold text-[#5A5850] sticky left-0 bg-[#FAF9F6] z-10 border-r border-[#E6E4DC]">
+                      <div className="flex items-center justify-between">
+                        <span>Inventory Status</span>
+                        {highlightDiffs && isDiff && (
+                          <span className="text-[10px] font-semibold text-[#8C6D23] px-1.5 py-0.5 rounded bg-[#F5EEDD]">Diff</span>
+                        )}
+                      </div>
+                    </td>
+                    {comparedProducts.map((p) => (
                       <td key={p.id} className="p-4 border-l border-[#E6E4DC]">
-                        {val !== undefined && val !== null ? (
-                          <span className="text-[#1A1A18] font-medium font-mono text-[11px]">
-                            {typeof val === 'boolean' ? (val ? 'Yes' : 'No') : String(val)}
+                        {p.inStock && p.stockCount > 0 ? (
+                          <span className="inline-flex items-center space-x-1.5 text-[#2E4032] font-medium">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>In Stock ({p.stockCount} units available)</span>
                           </span>
                         ) : (
-                          <span className="text-[#9A9890] italic text-[11px]">
-                            Not available in catalogue
+                          <span className="inline-flex items-center space-x-1.5 text-[#8F3E2B] font-medium">
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Strictly Out of Stock</span>
                           </span>
                         )}
                       </td>
-                    );
-                  })}
-                </tr>
-              ))}
+                    ))}
+                  </tr>
+                );
+              })()}
+
+              {/* Customer Rating */}
+              {(() => {
+                const ratingValues = comparedProducts.map(p => p.rating);
+                const isDiff = new Set(ratingValues).size > 1;
+                return (
+                  <tr className={highlightDiffs && isDiff ? 'bg-[#FCF9F2]' : ''}>
+                    <td className="p-4 font-semibold text-[#5A5850] sticky left-0 bg-[#FAF9F6] z-10 border-r border-[#E6E4DC]">
+                      <div className="flex items-center justify-between">
+                        <span>Verified Customer Rating</span>
+                        {highlightDiffs && isDiff && (
+                          <span className="text-[10px] font-semibold text-[#8C6D23] px-1.5 py-0.5 rounded bg-[#F5EEDD]">Diff</span>
+                        )}
+                      </div>
+                    </td>
+                    {comparedProducts.map((p) => (
+                      <td key={p.id} className="p-4 border-l border-[#E6E4DC]">
+                        <div className="flex items-center space-x-1.5">
+                          <Star className="w-3.5 h-3.5 fill-[#C79E38] text-[#C79E38]" />
+                          <span className="font-semibold text-[#1A1A18] font-mono">{p.rating.toFixed(1)} / 5</span>
+                          <span className="text-[#8A8880]">({p.reviewCount} reviews)</span>
+                          {p.rating === highestRating && comparedProducts.length > 1 && (
+                            <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#FAF4E6] text-[#8A6820] border border-[#EBDCB8]">
+                              Top Rated
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })()}
+
+              {/* Manufacturer Warranty */}
+              {(() => {
+                const warrantyValues = comparedProducts.map(p => p.warrantyMonths);
+                const isDiff = new Set(warrantyValues).size > 1;
+                return (
+                  <tr className={highlightDiffs && isDiff ? 'bg-[#FCF9F2]' : ''}>
+                    <td className="p-4 font-semibold text-[#5A5850] sticky left-0 bg-[#FAF9F6] z-10 border-r border-[#E6E4DC]">
+                      <div className="flex items-center justify-between">
+                        <span>Manufacturer Warranty</span>
+                        {highlightDiffs && isDiff && (
+                          <span className="text-[10px] font-semibold text-[#8C6D23] px-1.5 py-0.5 rounded bg-[#F5EEDD]">Diff</span>
+                        )}
+                      </div>
+                    </td>
+                    {comparedProducts.map((p) => (
+                      <td key={p.id} className="p-4 border-l border-[#E6E4DC]">
+                        {p.warrantyMonths} Months Official Manufacturer Limited Warranty
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })()}
+
+              {/* Return Window */}
+              {(() => {
+                const returnValues = comparedProducts.map(p => p.returnWindowDays);
+                const isDiff = new Set(returnValues).size > 1;
+                return (
+                  <tr className={highlightDiffs && isDiff ? 'bg-[#FCF9F2]' : ''}>
+                    <td className="p-4 font-semibold text-[#5A5850] sticky left-0 bg-[#FAF9F6] z-10 border-r border-[#E6E4DC]">
+                      <div className="flex items-center justify-between">
+                        <span>Store Return Window</span>
+                        {highlightDiffs && isDiff && (
+                          <span className="text-[10px] font-semibold text-[#8C6D23] px-1.5 py-0.5 rounded bg-[#F5EEDD]">Diff</span>
+                        )}
+                      </div>
+                    </td>
+                    {comparedProducts.map((p) => (
+                      <td key={p.id} className="p-4 border-l border-[#E6E4DC]">
+                        {p.returnWindowDays} Calendar Days (subject to return policy)
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })()}
+
+              {/* All Unique Technical Specs */}
+              {allSpecKeys.map((specKey) => {
+                const specValues = comparedProducts.map(p => {
+                  const val = p.specs ? p.specs[specKey] : undefined;
+                  return val !== undefined && val !== null ? String(val) : '__MISSING__';
+                });
+                const isDiff = new Set(specValues).size > 1;
+
+                return (
+                  <tr key={specKey} className={highlightDiffs && isDiff ? 'bg-[#FCF9F2]' : ''}>
+                    <td className="p-4 font-semibold text-[#5A5850] sticky left-0 bg-[#FAF9F6] z-10 border-r border-[#E6E4DC] capitalize">
+                      <div className="flex items-center justify-between">
+                        <span>{specKey.replace(/([A-Z])/g, ' $1')}</span>
+                        {highlightDiffs && isDiff && (
+                          <span className="text-[10px] font-semibold text-[#8C6D23] px-1.5 py-0.5 rounded bg-[#F5EEDD]">Diff</span>
+                        )}
+                      </div>
+                    </td>
+                    {comparedProducts.map((p) => {
+                      const val = p.specs ? p.specs[specKey] : undefined;
+                      return (
+                        <td key={p.id} className="p-4 border-l border-[#E6E4DC]">
+                          {val !== undefined && val !== null ? (
+                            <span className="text-[#1A1A18] font-medium font-mono text-[11px]">
+                              {typeof val === 'boolean' ? (val ? 'Yes' : 'No') : String(val)}
+                            </span>
+                          ) : (
+                            <span className="text-[#9A9890] italic text-[11px]">
+                              Not available in catalogue
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
 
             </tbody>
           </table>

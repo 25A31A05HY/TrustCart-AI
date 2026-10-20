@@ -14,7 +14,7 @@ import {
   Truck,
   CreditCard
 } from 'lucide-react';
-import { CartItem } from '../types';
+import { CartItem, CurrencyCode, formatCurrencyPrice } from '../types';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -23,6 +23,7 @@ interface CartDrawerProps {
   onUpdateQuantity: (productId: string, quantity: number) => void;
   onRemoveItem: (productId: string) => void;
   onClearCart: () => void;
+  selectedCurrency?: CurrencyCode;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -31,7 +32,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   items,
   onUpdateQuantity,
   onRemoveItem,
-  onClearCart
+  onClearCart,
+  selectedCurrency = 'USD'
 }) => {
   const [checkoutSuccess, setCheckoutSuccess] = useState<boolean>(false);
 
@@ -184,45 +186,52 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           </div>
 
           {/* Footer Breakdown & Checkout Action */}
-          {items.length > 0 && (
-            <div className="p-5 border-t border-[#EAE8E0] bg-[#FBFBFA] space-y-4">
-              <div className="space-y-1.5 text-xs text-[#5A5850]">
-                <div className="flex justify-between">
-                  <span>Merchandise Subtotal:</span>
-                  <span className="font-mono font-medium text-[#1A1A18] tabular-nums">${subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Standard Ground Shipping (POL-SHP-01):</span>
-                  <span className="font-mono font-medium tabular-nums text-[#2E4032]">
-                    {qualifiesForFreeShipping ? 'FREE' : `$${shippingCost.toFixed(2)}`}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Estimated Statutory Sales Tax (POL-SEC-01 ~7.25%):</span>
-                  <span className="font-mono font-medium text-[#1A1A18] tabular-nums">${estimatedTax.toFixed(2)}</span>
-                </div>
-                <div className="pt-2.5 border-t border-[#EAE8E0] flex justify-between text-sm font-bold text-[#1A1A18]">
-                  <span>Total Due:</span>
-                  <span className="font-mono text-[#2E4032] tabular-nums">${total.toFixed(2)} USD</span>
-                </div>
-              </div>
+          {items.length > 0 && (() => {
+            const fSubtotal = formatCurrencyPrice(subtotal, 'USD', selectedCurrency);
+            const fShipping = formatCurrencyPrice(shippingCost, 'USD', selectedCurrency);
+            const fTax = formatCurrencyPrice(estimatedTax, 'USD', selectedCurrency);
+            const fTotal = formatCurrencyPrice(total, 'USD', selectedCurrency);
 
-              {checkoutSuccess ? (
-                <div className="p-3.5 rounded-xl bg-[#F0F4F1] border border-[#D5E0D7] text-[#2E4032] text-center font-medium text-xs flex items-center justify-center space-x-2">
-                  <CheckCircle2 className="w-4 h-4 text-[#2E4032]" />
-                  <span>Order Placed Successfully! Preparing dispatch...</span>
+            return (
+              <div className="p-5 border-t border-[#EAE8E0] bg-[#FBFBFA] space-y-4">
+                <div className="space-y-1.5 text-xs text-[#5A5850]">
+                  <div className="flex justify-between">
+                    <span>Merchandise Subtotal:</span>
+                    <span className="font-mono font-medium text-[#1A1A18] tabular-nums">{fSubtotal.formatted}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Standard Ground Shipping (POL-SHP-01):</span>
+                    <span className="font-mono font-medium tabular-nums text-[#2E4032]">
+                      {qualifiesForFreeShipping ? 'FREE' : fShipping.formatted}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Estimated Statutory Sales Tax (POL-SEC-01 ~7.25%):</span>
+                    <span className="font-mono font-medium text-[#1A1A18] tabular-nums">{fTax.formatted}</span>
+                  </div>
+                  <div className="pt-2.5 border-t border-[#EAE8E0] flex justify-between text-sm font-bold text-[#1A1A18]">
+                    <span>Total Due:</span>
+                    <span className="font-mono text-[#2E4032] tabular-nums">{fTotal.formatted} {selectedCurrency}</span>
+                  </div>
                 </div>
-              ) : (
-                <button
-                  onClick={handleSimulateCheckout}
-                  className="w-full py-3 px-4 rounded-xl font-medium text-xs bg-[#2E4032] hover:bg-[#233226] text-white transition-all shadow-xs active:scale-[0.99] flex items-center justify-center space-x-2"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Complete Verified Checkout (${total.toFixed(2)})</span>
-                </button>
-              )}
-            </div>
-          )}
+
+                {checkoutSuccess ? (
+                  <div className="p-3.5 rounded-xl bg-[#F0F4F1] border border-[#D5E0D7] text-[#2E4032] text-center font-medium text-xs flex items-center justify-center space-x-2">
+                    <CheckCircle2 className="w-4 h-4 text-[#2E4032]" />
+                    <span>Order Placed Successfully! Preparing dispatch...</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleSimulateCheckout}
+                    className="w-full py-3 px-4 rounded-xl font-medium text-xs bg-[#2E4032] hover:bg-[#233226] text-white transition-all shadow-xs active:scale-[0.99] flex items-center justify-center space-x-2"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    <span>Complete Verified Checkout ({fTotal.formatted})</span>
+                  </button>
+                )}
+              </div>
+            );
+          })()}
 
         </div>
       </div>

@@ -10,7 +10,7 @@ import {
   PackageX,
   X
 } from 'lucide-react';
-import { Product } from '../types';
+import { Product, CurrencyCode } from '../types';
 import { ProductCard } from './ProductCard';
 
 interface ProductDiscoveryProps {
@@ -19,6 +19,7 @@ interface ProductDiscoveryProps {
   onInspectProduct: (product: Product) => void;
   onToggleCompare: (product: Product) => void;
   comparedProductIds: string[];
+  selectedCurrency?: CurrencyCode;
 }
 
 export const ProductDiscovery: React.FC<ProductDiscoveryProps> = ({
@@ -26,7 +27,8 @@ export const ProductDiscovery: React.FC<ProductDiscoveryProps> = ({
   onAddToCart,
   onInspectProduct,
   onToggleCompare,
-  comparedProductIds
+  comparedProductIds,
+  selectedCurrency = 'USD'
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -329,6 +331,7 @@ export const ProductDiscovery: React.FC<ProductDiscoveryProps> = ({
               onInspect={onInspectProduct}
               onToggleCompare={onToggleCompare}
               isCompared={comparedProductIds.includes(product.id)}
+              selectedCurrency={selectedCurrency}
             />
           ))}
         </div>

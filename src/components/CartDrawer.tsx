@@ -139,9 +139,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     <div className="flex-1 min-w-0 space-y-0.5">
                       <span className="text-[10px] uppercase font-semibold tracking-wider text-[#7A7870]">{product.brand}</span>
                       <h4 className="font-serif font-bold text-[#1A1A18] text-xs truncate">{product.title}</h4>
-                      <span className="font-bold text-[#1A1A18] font-mono tabular-nums block">
-                        ${product.price.toFixed(2)}
-                      </span>
+                      <div className="flex items-center space-x-2 text-[11px]">
+                        <span className="font-bold text-[#1A1A18] font-mono tabular-nums">
+                          {product.currency === 'INR' ? '₹' : '$'}{product.price.toFixed(2)}
+                        </span>
+                        <span className="text-[#8A8880]">•</span>
+                        <span className="text-[#686660]">{product.leadTimeDays}d lead time</span>
+                      </div>
                     </div>
 
                     <div className="flex flex-col items-end space-y-2 shrink-0">

@@ -7,7 +7,8 @@ import {
   Search,
   RotateCcw,
   SlidersHorizontal,
-  PackageX
+  PackageX,
+  X
 } from 'lucide-react';
 import { Product } from '../types';
 import { ProductCard } from './ProductCard';
@@ -146,8 +147,33 @@ export const ProductDiscovery: React.FC<ProductDiscoveryProps> = ({
       {/* Filter Surface */}
       <div className="bg-white border border-[#E6E4DC] rounded-xl p-5 space-y-4 shadow-2xs">
         
+        {/* Quick Category Chips Strip */}
+        <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 scrollbar-none">
+          {categories.map((c) => {
+            const count = c === 'All' ? products.length : products.filter(p => p.category === c).length;
+            const isSelected = selectedCategory === c;
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setSelectedCategory(c)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-150 flex items-center space-x-1.5 ${
+                  isSelected
+                    ? 'bg-[#2E4032] text-white shadow-2xs'
+                    : 'bg-[#F2F0EA] hover:bg-[#EAE6DE] text-[#4A4842]'
+                }`}
+              >
+                <span>{c}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${isSelected ? 'bg-white/20 text-white' : 'bg-black/5 text-[#686660]'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Top Filter Controls */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1 border-t border-[#F0EFEA]">
           
           {/* Keyword Search Field */}
           <div className="space-y-1.5">
@@ -161,8 +187,18 @@ export const ProductDiscovery: React.FC<ProductDiscoveryProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Product name, specs, brand..."
-                className="w-full bg-[#FAF9F6] border border-[#DDD9CF] focus:border-[#2E4032] rounded-lg pl-9 pr-3 py-2 text-xs text-[#1A1A18] placeholder-[#94928A] focus:outline-none transition-colors"
+                className="w-full bg-[#FAF9F6] border border-[#DDD9CF] focus:border-[#2E4032] rounded-lg pl-9 pr-8 py-2 text-xs text-[#1A1A18] placeholder-[#94928A] focus:outline-none transition-colors"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2.5 text-[#9A9890] hover:text-[#1A1A18] p-0.5"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
 

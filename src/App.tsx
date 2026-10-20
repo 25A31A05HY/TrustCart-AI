@@ -59,8 +59,9 @@ export default function App() {
   };
 
   // Chat message submission
-  const handleSendMessage = async (text: string, isRetry: boolean = false) => {
+  const handleSendMessage = async (text: string, isRetry: boolean = false, overrideMode?: EngineMode) => {
     if (!text.trim() || isLoading) return;
+    const effectiveMode = overrideMode || engineMode;
 
     if (!isRetry) {
       const userMsg: ChatMessage = {
@@ -71,7 +72,7 @@ export default function App() {
         citations: [],
         claims: [],
         retrievedProducts: [],
-        engineMode
+        engineMode: effectiveMode
       };
       setMessages((prev) => [...prev, userMsg]);
     }
@@ -87,7 +88,7 @@ export default function App() {
           message: text,
           history: messages.filter(m => m && !m.isError),
           constraints: activeConstraints,
-          engineMode
+          engineMode: effectiveMode
         })
       });
 
@@ -102,7 +103,7 @@ export default function App() {
           citations: [],
           claims: [],
           retrievedProducts: [],
-          engineMode,
+          engineMode: effectiveMode,
           isError: true,
           errorDetails: data?.details,
           retryable: data?.retryable ?? true
@@ -128,7 +129,7 @@ export default function App() {
         citations: [],
         claims: [],
         retrievedProducts: [],
-        engineMode,
+        engineMode: effectiveMode,
         isError: true,
         retryable: true
       };
@@ -144,6 +145,15 @@ export default function App() {
     if (!lastUserMsg) return;
     setMessages(prev => prev.filter(m => m && !m.isError));
     await handleSendMessage(lastUserMsg.content, true);
+  };
+
+  // Switch to offline deterministic engine and immediately retry
+  const handleSwitchToOfflineAndRetry = async () => {
+    setEngineMode('deterministic_offline');
+    const lastUserMsg = [...messages].reverse().find(m => m?.role === 'user');
+    if (!lastUserMsg) return;
+    setMessages(prev => prev.filter(m => m && !m.isError));
+    await handleSendMessage(lastUserMsg.content, true, 'deterministic_offline');
   };
 
   // Cart Management
@@ -253,6 +263,7 @@ export default function App() {
                 messages={messages}
                 onSendMessage={handleSendMessage}
                 onRetry={handleRetryLastMessage}
+                onSwitchToOffline={handleSwitchToOfflineAndRetry}
                 isLoading={isLoading}
                 onResetChat={handleResetChat}
                 onAddToCart={handleAddToCart}
